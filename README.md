@@ -1,56 +1,80 @@
-# Welcome to your Expo app 👋
+# GUHAM Frontend
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo Router 기반 GUHAM 모바일·웹 프론트엔드입니다. 백엔드 주소는 Vite의 `import.meta.env`가 아니라 Expo 방식인 `process.env.EXPO_PUBLIC_API_URL`로 읽습니다.
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## 실행
 
 ```bash
-npm run reset-project
+npm install
+copy .env.example .env
+npm run web
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+`.env`의 주소는 실행 환경에 따라 바꿉니다.
 
-### Other setup steps
+```dotenv
+# Expo Web 또는 iOS 시뮬레이터
+EXPO_PUBLIC_API_URL=http://localhost:3000
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+# Android 에뮬레이터
+EXPO_PUBLIC_API_URL=http://10.0.2.2:3000
 
-## Learn more
+# 실제 휴대폰(PC와 같은 Wi-Fi)
+EXPO_PUBLIC_API_URL=http://192.168.x.x:3000
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+실제 휴대폰에서는 `localhost`가 휴대폰 자신을 가리키므로 PC의 사설 IP를 써야 합니다. 백엔드는 `npm run dev`로 실행하고 Windows 방화벽에서 Node.js의 사설 네트워크 접근을 허용합니다.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+`EXPO_PUBLIC_*` 값은 앱 번들에 포함됩니다. AI API 키, Supabase secret/service-role 키는 프론트 `.env`에 넣지 말고 백엔드에서만 관리합니다.
 
-## Join the community
+## 폴더 구조
 
-Join our community of developers creating universal apps.
+```text
+frontend/
+├─ assets/                    # 로고, 아이콘, 폰트 등 정적 파일
+├─ src/
+│  ├─ app/                   # Expo Router 화면 및 URL 구조
+│  │  ├─ (auth)/             # 로그인, 회원가입, 온보딩
+│  │  ├─ index.tsx           # 홈
+│  │  ├─ write.tsx           # 포스팅 작성
+│  │  ├─ post-detail.tsx     # 포스팅 상세
+│  │  ├─ chat-list.tsx       # 채팅방 목록
+│  │  ├─ chat.tsx            # 채팅방
+│  │  └─ mypage.tsx          # 마이페이지
+│  ├─ api/
+│  │  ├─ client.ts           # 공통 apiFetch, 인증 헤더, 토큰 갱신
+│  │  ├─ auth.ts             # 로그인·회원가입·닉네임 확인
+│  │  ├─ users.ts            # 온보딩·마이페이지
+│  │  ├─ boards.ts           # 게시글 CRUD·multipart 이미지
+│  │  ├─ ai.ts               # AI 초안·게시글/사용자 추천
+│  │  ├─ chat.ts             # 채팅 REST API
+│  │  ├─ socket.ts           # Socket.IO 실시간 채팅
+│  │  ├─ notifications.ts    # 알림
+│  │  └─ types.ts            # 공통 API 타입
+│  ├─ auth/session.ts        # 네이티브 SecureStore·웹 localStorage 토큰 저장
+│  ├─ components/            # 재사용 UI 컴포넌트
+│  ├─ constants/             # 색상 등 상수
+│  └─ hooks/                 # 공통 React 훅
+├─ .env.example
+└─ package.json
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 연동 흐름
+
+1. 로그인 응답의 access/refresh token을 `sessionStore`에 저장합니다.
+2. `apiFetch(..., { auth: true })`가 Bearer 토큰을 자동 첨부합니다.
+3. 401이면 refresh token으로 한 번 재발급한 뒤 원래 요청을 재시도합니다.
+4. 게시글과 AI 초안의 이미지는 `FormData`로 전송하며 `Content-Type`은 런타임이 boundary까지 자동 설정합니다.
+5. 채팅은 과거 내역을 REST로 받은 뒤 `createChatSocket()`으로 `/chat` Socket.IO 경로에 연결합니다.
+
+## 백엔드와 함께 확인
+
+```bash
+# backend/backend
+npm run dev
+
+# frontend
+npm run web
+```
+
+브라우저 개발자 도구 Network에서 로그인 요청이 `http://localhost:3000/api/auth/login`으로 가는지 확인합니다. Expo Web origin은 백엔드 `CORS_ORIGIN`에 포함되어야 합니다.
