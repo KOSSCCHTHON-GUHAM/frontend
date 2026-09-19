@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     Pressable,
     StyleSheet,
     Text,
@@ -9,6 +11,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { usersApi } from "@/api";
 
 const GIVE_OPTIONS = [
   "기획",
@@ -66,6 +69,7 @@ export default function OnboardingScreen() {
   const [giveFields, setGiveFields] = useState<string[]>([]);
   const [interests, setInterests] = useState<string[]>([]);
   const [regions, setRegions] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const currentStep = STEPS[step];
   const isLastStep = step === STEPS.length - 1;
@@ -106,9 +110,21 @@ export default function OnboardingScreen() {
     setStep((prev) => prev - 1);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    if (selectedOptions.length === 0) {
+      Alert.alert("선택 확인", "하나 이상 선택해주세요.");
+      return;
+    }
     if (isLastStep) {
-      router.replace("/?loggedIn=true");
+      try {
+        setIsSubmitting(true);
+        await usersApi.saveOnboarding({ giveFields, interests, regions });
+        router.replace("/");
+      } catch (error) {
+        Alert.alert("저장 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -173,12 +189,17 @@ export default function OnboardingScreen() {
 
         <TouchableOpacity
           activeOpacity={0.85}
-          style={styles.nextButton}
+          style={[styles.nextButton, isSubmitting && styles.disabledButton]}
           onPress={handleNext}
+          disabled={isSubmitting}
         >
-          <Text style={styles.nextButtonText}>
-            {isLastStep ? "완료" : "다음"}
-          </Text>
+          {isSubmitting ? (
+            <ActivityIndicator color="#1C1C1C" />
+          ) : (
+            <Text style={styles.nextButtonText}>
+              {isLastStep ? "완료" : "다음"}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -276,5 +297,8 @@ const styles = StyleSheet.create({
     fontFamily: "PretendardBold",
     fontSize: 14,
     color: "#1C1C1C",
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

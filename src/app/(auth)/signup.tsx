@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -12,15 +14,59 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { authApi } from "@/api";
 
 export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [nickname, setNickname] = useState("");
+  const [nicknameChecked, setNicknameChecked] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSignup = () => {
-    router.replace("/login");
+  const handleNicknameCheck = async () => {
+    if (nickname.trim().length < 2 || nickname.trim().length > 10) {
+      Alert.alert("입력 확인", "닉네임은 2~10자로 입력해주세요.");
+      return;
+    }
+    try {
+      const result = await authApi.checkNickname(nickname.trim());
+      setNicknameChecked(result.isAvailable);
+      Alert.alert("닉네임 확인", result.message);
+    } catch (error) {
+      Alert.alert("확인 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+    }
+  };
+
+  const handleSignup = async () => {
+    if (!email.trim() || !password || !nickname.trim()) {
+      Alert.alert("입력 확인", "모든 항목을 입력해주세요.");
+      return;
+    }
+    if (password.length < 8) {
+      Alert.alert("입력 확인", "비밀번호는 8자 이상이어야 합니다.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      Alert.alert("입력 확인", "비밀번호 확인이 일치하지 않습니다.");
+      return;
+    }
+    if (!nicknameChecked) {
+      Alert.alert("입력 확인", "닉네임 중복확인을 해주세요.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await authApi.register(email.trim(), password, nickname.trim());
+      Alert.alert("가입 완료", "로그인 후 온보딩을 진행해주세요.", [
+        { text: "확인", onPress: () => router.replace("/login") },
+      ]);
+    } catch (error) {
+      Alert.alert("회원가입 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -90,23 +136,37 @@ export default function SignupScreen() {
             <View style={styles.nicknameInput}>
               <TextInput
                 value={nickname}
-                onChangeText={setNickname}
+                onChangeText={(value) => {
+                  setNickname(value);
+                  setNicknameChecked(false);
+                }}
                 placeholder="2~10자 이내로 입력해주세요"
                 placeholderTextColor="#B8B8B8"
                 style={styles.nicknameTextInput}
               />
 
-              <TouchableOpacity activeOpacity={0.7} style={styles.checkButton}>
-                <Text style={styles.checkButtonText}>중복확인</Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                style={styles.checkButton}
+                onPress={handleNicknameCheck}
+              >
+                <Text style={styles.checkButtonText}>
+                  {nicknameChecked ? "확인완료" : "중복확인"}
+                </Text>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity
               activeOpacity={0.85}
-              style={styles.signupButton}
+              style={[styles.signupButton, isSubmitting && styles.disabledButton]}
               onPress={handleSignup}
+              disabled={isSubmitting}
             >
-              <Text style={styles.signupButtonText}>가입 완료</Text>
+              {isSubmitting ? (
+                <ActivityIndicator color="#1C1C1C" />
+              ) : (
+                <Text style={styles.signupButtonText}>가입 완료</Text>
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -218,5 +278,8 @@ const styles = StyleSheet.create({
     fontFamily: "PretendardBold",
     fontSize: 15,
     color: "#1C1C1C",
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });
