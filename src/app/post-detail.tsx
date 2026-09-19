@@ -1,234 +1,160 @@
-import { useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  Modal,
-  Image,
-  StyleSheet,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { aiApi, boardsApi, chatApi, type Board, type UserProfile } from "@/api";
 
-// 지금은 예시 내용이에요. 나중에 백엔드 API(GET /api/boards/:id)에서 받아온 값으로 바꾸면 돼요.
-const post = {
-  category: "IT/AI",
-  region: "서울 / 온라인",
-  title: "AI 기반 탄소발자국 측정 앱",
-  author: "박지수",
-  authorSkills: ["AI/ML", "Backend"],
-  intro:
-    "일상 소비 패턴을 분석해 탄소발자국을 실시간으로 측정하고 감축 솔루션을 제안하는 앱입니다. ESG 공모전 출품을 목표로 하고 있습니다.",
-  give: ["기획", "AI/ML"],
-  need: ["Frontend", "UI/UX"],
-  info: [
-    { label: "진행 방식", value: "온라인 비대면" },
-    { label: "활동 시간", value: "주 2회 / 회당 2시간" },
-    { label: "모집 인원", value: "2/4명" },
-    { label: "관련 링크", value: "notion.so/carbonapp" },
-  ],
-};
+type Author = { id: string; nickname: string; giveFields?: string[] };
+type Candidate = { user: UserProfile; rank: number; matchScore: number; matchedTags: string[]; recommendationReasons: string[] };
 
-// AI 추천 매칭 예시예요. 나중에 백엔드 AI 추천 API(/api/ai/recommend) 결과로 바꾸면 돼요.
-const candidates = [
-  { id: 1, name: "김민준", skills: ["Frontend", "React"] },
-  { id: 2, name: "이서연", skills: ["UI/UX", "디자인"] },
-  { id: 3, name: "박지호", skills: ["Backend", "Python"] },
-];
-
-// 사용자 프로필 이미지예요. 지금은 모든 사용자가 같은 이미지를 써요.
 function Avatar({ size }: { size: number }) {
-  return (
-    <Image
-      source={require("../../assets/avatar.png")}
-      style={{ width: size, height: size, borderRadius: size / 2 }}
-      resizeMode="contain"
-    />
-  );
+  return <Image source={require("../../assets/avatar.png")} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="contain" />;
 }
-
-// 지금 로그인한 사용자 이름이에요. 나중에 로그인 기능이 생기면 실제 로그인한 사용자 정보로 바꾸면 돼요.
-// (마이페이지 예시 데이터랑 같은 이름을 써서 "내가 쓴 글"인지 확인하고 있어요.)
-const CURRENT_USER_NAME = "유진(yujin_dev)";
 
 export default function PostDetail() {
   const router = useRouter();
-  // 글쓴이가 지금 로그인한 사용자면 "작성자" 화면, 아니면 "방문자" 화면을 자동으로 보여줘요.
-  // 사람이 직접 누르는 토글이 아니라, 데이터로 자동 판단해요.
-  const mode: "visitor" | "author" =
-    post.author === CURRENT_USER_NAME ? "author" : "visitor";
+  const { boardId } = useLocalSearchParams<{ boardId?: string }>();
+  const [board, setBoard] = useState<Board | null>(null);
+  const [author, setAuthor] = useState<Author | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [chatLoading, setChatLoading] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
 
-  const goChatFromSheet = () => {
-    setSheetOpen(false);
-    // 시트가 닫히는 동안 바로 이동하면 아이폰에서 꼬일 수 있어서 잠깐 기다려요.
-    setTimeout(() => router.push("/chat"), 300);
+  useEffect(() => {
+    if (!boardId) {
+      Alert.alert("포스팅 오류", "포스팅 식별자가 없습니다.");
+      router.replace("/");
+      return;
+    }
+    boardsApi.detail(boardId).then((result) => {
+      setBoard(result.board);
+      setAuthor(result.author);
+      setIsOwner(result.permissions.isOwner);
+    }).catch((error) => {
+      Alert.alert("포스팅 조회 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+      router.replace("/");
+    }).finally(() => setLoading(false));
+  }, [boardId, router]);
+
+  const openChat = async (targetUserId: string) => {
+    if (!board) return;
+    try {
+      setChatLoading(true);
+      const { room } = await chatApi.createRoom(targetUserId, board.id);
+      setSheetOpen(false);
+      router.push({ pathname: "/chat", params: { roomId: room.id } });
+    } catch (error) {
+      Alert.alert("채팅방 생성 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+    } finally {
+      setChatLoading(false);
+    }
   };
+
+  const handleMainAction = async () => {
+    if (!board || !author) return;
+    if (!isOwner) {
+      await openChat(author.id);
+      return;
+    }
+    try {
+      setChatLoading(true);
+      const result = await aiApi.recommendUsers(board.id, 10);
+      setCandidates(result.recommendations);
+      setSheetOpen(true);
+    } catch (error) {
+      Alert.alert("추천 사용자 조회 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  if (loading || !board) {
+    return <SafeAreaView style={styles.safe}><ActivityIndicator color="#1A1A1A" style={{ flex: 1 }} /></SafeAreaView>;
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.container}>
-        {/* 헤더 */}
         <View style={styles.header}>
-          <Pressable
-            hitSlop={8}
-            onPress={() =>
-              router.canGoBack() ? router.back() : router.replace("/")
-            }
-          >
+          <Pressable hitSlop={8} onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
             <Ionicons name="chevron-back" size={24} color="#111111" />
           </Pressable>
           <Text style={styles.headerTitle}>포스팅 상세</Text>
-          <Pressable hitSlop={8} onPress={() => {}}>
-            <Ionicons name="ellipsis-horizontal" size={20} color="#111111" />
-          </Pressable>
+          <View style={{ width: 24 }} />
         </View>
 
         <ScrollView>
-          {/* 제목 + 작성자 */}
           <View style={styles.section}>
             <View style={styles.row}>
-              <View style={styles.grayTag}>
-                <Text style={styles.grayTagText}>{post.category}</Text>
-              </View>
-              <View style={styles.grayTag}>
-                <Text style={styles.grayTagText}>{post.region}</Text>
-              </View>
+              {[board.category, board.activityRegion].map((item) => <View key={item} style={styles.grayTag}><Text style={styles.grayTagText}>{item}</Text></View>)}
             </View>
-            <Text style={styles.title}>{post.title}</Text>
-
-            <Pressable style={styles.authorRow} onPress={() => {}}>
+            <Text style={styles.title}>{board.title}</Text>
+            <View style={styles.authorRow}>
               <Avatar size={40} />
               <View style={styles.authorInfo}>
-                <Text style={styles.authorName}>{post.author}</Text>
+                <Text style={styles.authorName}>{author?.nickname ?? "사용자"}</Text>
                 <View style={styles.row}>
-                  {post.authorSkills.map((s) => (
-                    <View key={s} style={[styles.tag, styles.tagGive]}>
-                      <Text style={[styles.tagText, styles.tagTextGive]}>{s}</Text>
-                    </View>
-                  ))}
+                  {(author?.giveFields ?? []).map((skill) => <View key={skill} style={[styles.tag, styles.tagGive]}><Text style={[styles.tagText, styles.tagTextGive]}>{skill}</Text></View>)}
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#999999" />
-            </Pressable>
+            </View>
           </View>
 
-          {/* 프로젝트 소개 */}
+          {board.imageUrls.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gallery}>
+              {board.imageUrls.map((url) => <Image key={url} source={{ uri: url }} style={styles.galleryImage} />)}
+            </ScrollView>
+          )}
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>프로젝트 소개</Text>
-            <Text style={styles.body}>{post.intro}</Text>
+            <Text style={styles.body}>{board.content}</Text>
           </View>
 
-          {/* GIVE / NEED */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>GIVE / NEED</Text>
             <Text style={styles.subLabel}>GIVE — 프로젝트가 제공</Text>
-            <View style={styles.row}>
-              {post.give.map((s) => (
-                <View key={s} style={[styles.tag, styles.tagGive]}>
-                  <Text style={[styles.tagText, styles.tagTextGive]}>{s}</Text>
-                </View>
-              ))}
-            </View>
-            <Text style={[styles.subLabel, { marginTop: 12 }]}>
-              NEED — 모집 중인 역할
-            </Text>
-            <View style={styles.row}>
-              {post.need.map((s) => (
-                <View key={s} style={[styles.tag, styles.tagNeed]}>
-                  <Text style={[styles.tagText, styles.tagTextNeed]}>{s}</Text>
-                </View>
-              ))}
-            </View>
+            <View style={styles.row}>{board.giveTags.map((tag) => <View key={tag} style={[styles.tag, styles.tagGive]}><Text style={[styles.tagText, styles.tagTextGive]}>{tag}</Text></View>)}</View>
+            <Text style={[styles.subLabel, { marginTop: 12 }]}>NEED — 모집 중인 역할</Text>
+            <View style={styles.row}>{board.needTags.map((tag) => <View key={tag} style={[styles.tag, styles.tagNeed]}><Text style={[styles.tagText, styles.tagTextNeed]}>{tag}</Text></View>)}</View>
           </View>
 
-          {/* 활동 정보 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>활동 정보</Text>
-            {post.info.map((item) => (
-              <View key={item.label} style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{item.label}</Text>
-                <Text style={styles.infoValue}>{item.value}</Text>
-              </View>
-            ))}
+            {[
+              ["진행 방식", board.activityMethod],
+              ["활동 시간", board.activityHours],
+              ["모집 인원", `${board.recruitment.current}/${board.recruitment.target}명`],
+              ["관련 링크", board.relatedLinks.join(", ") || "없음"],
+            ].map(([label, value]) => <View key={label} style={styles.infoRow}><Text style={styles.infoLabel}>{label}</Text><Text style={styles.infoValue}>{value}</Text></View>)}
           </View>
         </ScrollView>
 
-        {/* 하단 버튼: 방문자는 채팅, 작성자는 매칭 목록 */}
         <View style={styles.footer}>
-          {mode === "visitor" ? (
-            <Pressable
-              style={styles.mainButton}
-              onPress={() => router.push("/chat")}
-            >
-              <Text style={styles.mainButtonText}>채팅 시작하기</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              style={styles.mainButton}
-              onPress={() => setSheetOpen(true)}
-            >
-              <Text style={styles.mainButtonText}>매칭 목록 보기</Text>
-            </Pressable>
-          )}
+          <Pressable style={[styles.mainButton, chatLoading && styles.disabled]} onPress={handleMainAction} disabled={chatLoading}>
+            {chatLoading ? <ActivityIndicator color="#1A1A1A" /> : <Text style={styles.mainButtonText}>{isOwner ? "AI 추천 팀원 보기" : "채팅 시작하기"}</Text>}
+          </Pressable>
         </View>
       </View>
 
-      {/* AI 추천 매칭 (아래에서 올라오는 시트) */}
-      <Modal
-        visible={sheetOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSheetOpen(false)}
-      >
+      <Modal visible={sheetOpen} transparent animationType="slide" onRequestClose={() => setSheetOpen(false)}>
         <View style={styles.overlay}>
-          <Pressable
-            style={styles.overlayTouch}
-            onPress={() => setSheetOpen(false)}
-          />
+          <Pressable style={styles.overlayTouch} onPress={() => setSheetOpen(false)} />
           <View style={styles.sheet}>
             <View style={styles.handle} />
-            <View style={styles.sheetHeader}>
-              <View>
-                <View style={styles.sheetTitleRow}>
-                  <Ionicons name="sparkles" size={13} color="#111111" />
-                  <Text style={styles.sheetTitle}>AI 추천 매칭</Text>
-                </View>
-                <Text style={styles.sheetSub}>NEED 적합도 높은 순으로 추천해요</Text>
-              </View>
-              <Pressable
-                style={styles.closeButton}
-                onPress={() => setSheetOpen(false)}
-              >
-                <Ionicons name="close" size={16} color="#444444" />
-              </Pressable>
-            </View>
-
-            {candidates.map((c, i) => (
-              <View
-                key={c.id}
-                style={[styles.candidate, i === 0 && styles.candidateTop]}
-              >
-                <Text style={[styles.rank, i === 0 && styles.rankTop]}>
-                  {i + 1}
-                </Text>
+            <Text style={styles.sheetTitle}>AI 추천 팀원</Text>
+            {candidates.length === 0 && <Text style={styles.empty}>추천할 사용자가 없습니다.</Text>}
+            {candidates.map((candidate) => (
+              <View key={candidate.user.id} style={styles.candidate}>
+                <Text style={styles.rank}>{candidate.rank}</Text>
                 <Avatar size={36} />
-                <View style={styles.candInfo}>
-                  <Text style={styles.candName}>{c.name}</Text>
-                  <View style={styles.row}>
-                    {c.skills.map((s) => (
-                      <View key={s} style={[styles.tag, styles.tagGive]}>
-                        <Text style={[styles.tagText, styles.tagTextGive]}>{s}</Text>
-                      </View>
-                    ))}
-                  </View>
+                <View style={styles.candidateInfo}>
+                  <Text style={styles.authorName}>{candidate.user.nickname} · {candidate.matchScore}점</Text>
+                  <Text style={styles.subLabel}>{candidate.matchedTags.join(", ") || candidate.recommendationReasons.join(", ")}</Text>
                 </View>
-                <Pressable style={styles.candChat} onPress={goChatFromSheet}>
-                  <Ionicons name="chatbubble-outline" size={12} color="#FFFFFF" />
-                  <Text style={styles.candChatText}>채팅</Text>
-                </Pressable>
+                <Pressable style={styles.candidateChat} onPress={() => openChat(candidate.user.id)}><Text style={styles.candidateChatText}>채팅</Text></Pressable>
               </View>
             ))}
           </View>
@@ -240,171 +166,44 @@ export default function PostDetail() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#FFFFFF" },
-  // 웹 브라우저에서 볼 때도 폰 너비처럼 보이게 제한해요.
-  container: {
-    flex: 1,
-    width: "100%",
-    maxWidth: 480,
-    alignSelf: "center",
-    backgroundColor: "#F5F5F5",
-  },
+  container: { flex: 1, width: "100%", maxWidth: 480, alignSelf: "center", backgroundColor: "#F5F5F5" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#EEEEEE" },
+  headerTitle: { fontSize: 15, fontWeight: "bold" },
+  section: { backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingVertical: 16, marginBottom: 8 },
   row: { flexDirection: "row", alignItems: "center", flexWrap: "wrap" },
-
-  // 헤더
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
-  },
-  headerTitle: { flex: 1, marginLeft: 10, fontSize: 15, fontWeight: "bold" },
-  headerRight: { flexDirection: "row", alignItems: "center" },
-  moreButton: { marginLeft: 12 },
-  modeToggle: {
-    flexDirection: "row",
-    backgroundColor: "#F0F0F0",
-    borderRadius: 6,
-    padding: 2,
-  },
-  modeItem: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  modeItemOn: { backgroundColor: "#1A1A1A" },
-  modeText: { fontSize: 10, color: "#888888" },
-  modeTextOn: { color: "#FFFFFF", fontWeight: "bold" },
-
-  // 구역
-  section: {
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    marginBottom: 8,
-  },
-  sectionTitle: { fontSize: 13, fontWeight: "bold", marginBottom: 10 },
-  title: { fontSize: 20, fontWeight: "bold", marginTop: 12 },
-  body: { fontSize: 13, color: "#444444", lineHeight: 21 },
-
-  // 태그
-  grayTag: {
-    backgroundColor: "#F0F0F0",
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 6,
-  },
+  grayTag: { backgroundColor: "#F0F0F0", borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4, marginRight: 6 },
   grayTagText: { fontSize: 11, color: "#666666" },
-  tag: {
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 6,
-    marginTop: 4,
-  },
+  title: { fontSize: 20, fontWeight: "bold", marginTop: 12 },
+  authorRow: { flexDirection: "row", alignItems: "center", marginTop: 16 },
+  authorInfo: { flex: 1, marginLeft: 12 },
+  authorName: { fontSize: 14, fontWeight: "bold" },
+  gallery: { padding: 16, gap: 8, backgroundColor: "#FFFFFF", marginBottom: 8 },
+  galleryImage: { width: 140, height: 100, borderRadius: 12, backgroundColor: "#EEEEEE" },
+  sectionTitle: { fontSize: 13, fontWeight: "bold", marginBottom: 10 },
+  body: { fontSize: 13, color: "#444444", lineHeight: 21 },
+  subLabel: { fontSize: 11, color: "#888888", marginTop: 4 },
+  tag: { borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4, marginRight: 6, marginTop: 4 },
   tagGive: { backgroundColor: "#E3F2FD" },
   tagNeed: { backgroundColor: "#FCE4EC" },
   tagText: { fontSize: 11, fontWeight: "600" },
   tagTextGive: { color: "#1E88E5" },
   tagTextNeed: { color: "#D81B60" },
-  subLabel: { fontSize: 11, color: "#888888", marginBottom: 4 },
-
-  // 작성자
-  authorRow: { flexDirection: "row", alignItems: "center", marginTop: 16 },
-  authorInfo: { flex: 1, marginLeft: 12 },
-  authorName: { fontSize: 14, fontWeight: "bold" },
-
-  // 활동 정보
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-  },
+  infoRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 },
   infoLabel: { fontSize: 12, color: "#888888" },
-  infoValue: { fontSize: 12, fontWeight: "bold", color: "#222222" },
-
-  // 하단 버튼
-  footer: {
-    padding: 16,
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderTopColor: "#EEEEEE",
-  },
-  mainButton: {
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: "#F6D68F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  infoValue: { flex: 1, textAlign: "right", fontSize: 12, fontWeight: "bold", color: "#222222", marginLeft: 16 },
+  footer: { padding: 16, backgroundColor: "#FFFFFF", borderTopWidth: 1, borderTopColor: "#EEEEEE" },
+  mainButton: { height: 48, borderRadius: 12, backgroundColor: "#F6D68F", alignItems: "center", justifyContent: "center" },
   mainButtonText: { fontSize: 14, fontWeight: "bold", color: "#222222" },
-
-  // AI 추천 매칭 시트
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
+  disabled: { opacity: 0.6 },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   overlayTouch: { flex: 1 },
-  sheet: {
-    width: "100%",
-    maxWidth: 480,
-    alignSelf: "center",
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 32,
-  },
-  handle: {
-    alignSelf: "center",
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#DDDDDD",
-    marginBottom: 14,
-  },
-  sheetHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  sheetTitleRow: { flexDirection: "row", alignItems: "center" },
-  sheetTitle: { fontSize: 14, fontWeight: "bold", marginLeft: 4 },
-  sheetSub: { fontSize: 11, color: "#888888", marginTop: 4 },
-  closeButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#F0F0F0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  candidate: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#EEEEEE",
-    backgroundColor: "#F8F8F8",
-    marginTop: 8,
-  },
-  candidateTop: { backgroundColor: "#FFF6E5", borderColor: "#F6D68F" },
-  rank: { width: 16, fontSize: 12, color: "#999999", fontWeight: "bold" },
-  rankTop: { color: "#E0A030" },
-  candInfo: { flex: 1, marginLeft: 10 },
-  candName: { fontSize: 13, fontWeight: "bold" },
-  candChat: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1A1A1A",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginLeft: 8,
-  },
-  candChatText: { fontSize: 11, color: "#FFFFFF", fontWeight: "bold", marginLeft: 4 },
+  sheet: { width: "100%", maxWidth: 480, maxHeight: "65%", alignSelf: "center", backgroundColor: "#FFFFFF", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
+  handle: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "#DDDDDD", marginBottom: 14 },
+  sheetTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 10 },
+  candidate: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#EEEEEE" },
+  rank: { width: 22, fontSize: 12, fontWeight: "bold", color: "#E0A030" },
+  candidateInfo: { flex: 1, marginLeft: 10 },
+  candidateChat: { backgroundColor: "#1A1A1A", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  candidateChatText: { color: "#FFFFFF", fontSize: 11, fontWeight: "bold" },
+  empty: { paddingVertical: 20, textAlign: "center", color: "#999999" },
 });

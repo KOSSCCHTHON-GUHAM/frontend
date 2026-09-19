@@ -1,130 +1,38 @@
-<<<<<<< HEAD
-=======
 import { Ionicons } from "@expo/vector-icons";
 import { Redirect, useRouter } from "expo-router";
->>>>>>> 7669bd34230bf8635adeeffd6ccffe546702d1d5
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-<<<<<<< HEAD
-  ScrollView,
-  Pressable,
-  Image,
-  ActivityIndicator,
-  StyleSheet,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { apiFetch } from "../api/client";
-
-type Tag = { type: "GIVE" | "NEED"; label: string };
-
-// 백엔드 GET /api/boards가 돌려주는 게시글 하나의 모양이에요.
-type BoardDetail = {
-  id: string;
-=======
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { aiApi, boardsApi, type Board } from "@/api";
 import { sessionStore } from "@/auth/session";
 
 type Tag = { type: "GIVE" | "NEED"; label: string };
 
-type Post = {
-  id: number;
-  category: string;
-  region: string;
-  ago: string;
-  hoursAgo: number;
->>>>>>> 7669bd34230bf8635adeeffd6ccffe546702d1d5
-  title: string;
-  category: string;
-  content: string;
-  giveTags: string[];
-  needTags: string[];
-  activityRegion: string;
-  activityMethod: string;
-  activityHours: string;
-  recruitCount: number;
-  recruitment: { current: number; target: number; status: string };
-  createdAt: string;
+type Post = Board & {
   author?: { id: string; nickname: string };
-};
-
-type BoardsResponse = {
-  boards: BoardDetail[];
-  total: number;
-  page: number;
-  hasNext: boolean;
+  matchScore?: number;
+  recommendationReasons?: string[];
 };
 
 const categories = ["전체", "IT/AI", "창업", "ESG", "마케팅", "디자인"];
 
-<<<<<<< HEAD
-// 하단 탭: 나중에 Expo Router의 진짜 탭 이동으로 바꿀 자리예요.
-=======
-const posts: Post[] = [
-  {
-    id: 1,
-    category: "IT/AI",
-    region: "서울 / 온라인",
-    ago: "2시간 전",
-    hoursAgo: 2,
-    title: "AI 기반 탄소발자국 측정 앱",
-    tags: [
-      { type: "GIVE", label: "기획" },
-      { type: "GIVE", label: "AI/ML" },
-      { type: "NEED", label: "Frontend" },
-      { type: "NEED", label: "UI/UX" },
-    ],
-    author: "박지수",
-    joined: 2,
-    capacity: 4,
-  },
-  {
-    id: 2,
-    category: "창업",
-    region: "전국",
-    ago: "5시간 전",
-    hoursAgo: 5,
-    title: "대학생 중고거래 커뮤니티 플랫폼",
-    tags: [
-      { type: "GIVE", label: "Frontend" },
-      { type: "GIVE", label: "UI/UX" },
-      { type: "NEED", label: "Backend" },
-      { type: "NEED", label: "기획" },
-    ],
-    author: "김민준",
-    joined: 1,
-    capacity: 3,
-  },
-  {
-    id: 3,
-    category: "ESG",
-    region: "경기 / 서울",
-    ago: "1일 전",
-    hoursAgo: 24,
-    title: "지역 소상공인 디지털 전환 컨설팅",
-    tags: [
-      { type: "GIVE", label: "기획" },
-      { type: "GIVE", label: "Data" },
-      { type: "NEED", label: "마케팅" },
-      { type: "NEED", label: "UI/UX" },
-      { type: "NEED", label: "Frontend" },
-    ],
-    author: "이하은",
-    joined: 0,
-    capacity: 5,
-  },
-];
+const relativeTime = (date: string) => {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 60000));
+  if (minutes < 60) return `${Math.max(1, minutes)}분 전`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}시간 전`;
+  return `${Math.floor(minutes / 1440)}일 전`;
+};
 
->>>>>>> 7669bd34230bf8635adeeffd6ccffe546702d1d5
 const tabs = [
   { label: "홈", icon: "home-outline", activeIcon: "home" },
   { label: "포스팅", icon: "add", activeIcon: "add" },
@@ -142,18 +50,6 @@ function Avatar({ size = 24 }: { size?: number }) {
   );
 }
 
-// "2024-05-01T10:00:00Z" 같은 시각을 "2시간 전" 같은 문구로 바꿔줘요.
-function timeAgo(iso: string) {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "방금 전";
-  if (minutes < 60) return `${minutes}분 전`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}시간 전`;
-  const days = Math.floor(hours / 24);
-  return `${days}일 전`;
-}
-
 export default function Home() {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
@@ -161,33 +57,9 @@ export default function Home() {
   const [category, setCategory] = useState("전체");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"recommend" | "latest">("recommend");
-
-<<<<<<< HEAD
-  const [boards, setBoards] = useState<BoardDetail[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // 카테고리 / 검색어 / 정렬이 바뀔 때마다 백엔드에서 목록을 다시 받아와요.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams();
-      if (category !== "전체") params.set("category", category);
-      if (query.trim()) params.set("keyword", query.trim());
-      params.set("sort", sort === "latest" ? "LATEST" : "RECOMMENDED");
-
-      setLoading(true);
-      setError(null);
-      apiFetch<BoardsResponse>(`/api/boards?${params.toString()}`)
-        .then((res) => setBoards(res.boards))
-        .catch((err) =>
-          setError(err instanceof Error ? err.message : "목록을 불러오지 못했어요")
-        )
-        .finally(() => setLoading(false));
-    }, 300); // 타이핑 중간마다 요청 보내지 않도록 살짝 기다려요.
-
-    return () => clearTimeout(timer);
-  }, [category, query, sort]);
-=======
   useEffect(() => {
     sessionStore.getAccessToken().then((token) => {
       setIsAuthenticated(Boolean(token));
@@ -195,17 +67,24 @@ export default function Home() {
     });
   }, []);
 
-  const filtered = posts
-    .filter((post) => category === "전체" || post.category === category)
-    .filter((post) =>
-      post.title.toLowerCase().includes(query.trim().toLowerCase()),
-    );
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let active = true;
+    setLoading(true);
+    const load = sort === "recommend"
+      ? aiApi.recommendBoards({ category: category === "전체" ? undefined : category, keyword: query || undefined, limit: 50 })
+      : boardsApi.list({ category: category === "전체" ? undefined : category, keyword: query || undefined, sort: "LATEST", limit: 50 });
+    load.then((result) => {
+      if (active) setPosts(result.boards as Post[]);
+    }).catch((error) => {
+      if (active) Alert.alert("포스팅 조회 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [isAuthenticated, category, query, sort]);
 
-  const visible =
-    sort === "latest"
-      ? [...filtered].sort((a, b) => a.hoursAgo - b.hoursAgo)
-      : filtered;
->>>>>>> 7669bd34230bf8635adeeffd6ccffe546702d1d5
+  const visible = posts;
 
   const goTab = (label: string) => {
     if (label === "포스팅") router.push("/write");
@@ -323,93 +202,31 @@ export default function Home() {
         </View>
 
         <ScrollView contentContainerStyle={styles.list}>
-          {loading && <ActivityIndicator style={{ marginTop: 40 }} color="#1A1A1A" />}
-
-          {!loading && error && (
-            <Text style={styles.empty}>{error}{"\n"}백엔드 서버가 켜져 있는지 확인해주세요.</Text>
-          )}
-
-          {!loading && !error && boards.length === 0 && (
+          {loading && <ActivityIndicator color="#1A1A1A" style={{ marginTop: 40 }} />}
+          {visible.length === 0 && (
             <Text style={styles.empty}>조건에 맞는 포스팅이 없어요</Text>
           )}
 
-<<<<<<< HEAD
-          {!loading &&
-            !error &&
-            boards.map((post) => {
-              const tags: Tag[] = [
-                ...post.giveTags.map((label) => ({ type: "GIVE" as const, label })),
-                ...post.needTags.map((label) => ({ type: "NEED" as const, label })),
-              ];
-              return (
-                <Pressable
-                  key={post.id}
-                  style={styles.card}
-                  onPress={() =>
-                    router.push({ pathname: "/post-detail", params: { id: post.id } })
-                  }
-                >
-                  <View style={styles.cardTop}>
-                    <Text style={styles.meta}>
-                      {post.category} · {post.activityRegion}
-                    </Text>
-                    <Text style={styles.ago}>{timeAgo(post.createdAt)}</Text>
-                  </View>
-                  <Text style={styles.title}>{post.title}</Text>
-                  <View style={styles.tagRow}>
-                    {tags.map((tag) => (
-                      <View
-                        key={tag.type + tag.label}
-                        style={[
-                          styles.tag,
-                          tag.type === "GIVE" ? styles.tagGive : styles.tagNeed,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.tagText,
-                            tag.type === "GIVE"
-                              ? styles.tagTextGive
-                              : styles.tagTextNeed,
-                          ]}
-                        >
-                          {tag.type} · {tag.label}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                  <View style={styles.cardBottom}>
-                    <View style={styles.authorRow}>
-                      <Avatar size={24} />
-                      <Text style={styles.author}>
-                        {post.author?.nickname ?? "익명"}
-                      </Text>
-                    </View>
-                    <Text style={styles.recruit}>
-                      모집 {post.recruitment.current}/{post.recruitment.target}명
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-=======
           {visible.map((post) => (
             <Pressable
               key={post.id}
               style={styles.card}
-              onPress={() => router.push("/post-detail")}
+              onPress={() => router.push({ pathname: "/post-detail", params: { boardId: post.id } })}
             >
               <View style={styles.cardTop}>
                 <Text style={styles.meta}>
-                  {post.category} · {post.region}
+                  {post.category} · {post.activityRegion}
                 </Text>
-                <Text style={styles.ago}>{post.ago}</Text>
+                <Text style={styles.ago}>{relativeTime(post.createdAt)}</Text>
               </View>
 
               <Text style={styles.title}>{post.title}</Text>
 
               <View style={styles.tagRow}>
-                {post.tags.map((tag) => (
+                {[
+                  ...post.giveTags.map((label) => ({ type: "GIVE" as const, label })),
+                  ...post.needTags.map((label) => ({ type: "NEED" as const, label })),
+                ].map((tag) => (
                   <View
                     key={tag.type + tag.label}
                     style={[
@@ -434,16 +251,15 @@ export default function Home() {
               <View style={styles.cardBottom}>
                 <View style={styles.authorRow}>
                   <Avatar size={24} />
-                  <Text style={styles.author}>{post.author}</Text>
+                  <Text style={styles.author}>{post.author?.nickname ?? "사용자"}</Text>
                 </View>
 
                 <Text style={styles.recruit}>
-                  모집 {post.joined}/{post.capacity}명
+                  모집 {post.recruitment.current}/{post.recruitment.target}명
                 </Text>
               </View>
             </Pressable>
           ))}
->>>>>>> 7669bd34230bf8635adeeffd6ccffe546702d1d5
         </ScrollView>
 
         <View style={styles.tabBar}>

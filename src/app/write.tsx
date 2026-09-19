@@ -1,22 +1,22 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Image,
   View,
   Text,
   TextInput,
   ScrollView,
   Pressable,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-
-const MAX_PHOTOS = 10;
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { aiApi, boardsApi, type BoardInput, type UploadImage } from "@/api";
 
 // 선택지 목록이에요. 필요하면 여기만 고치면 돼요.
 const categoryOptions = ["IT/AI", "창업", "ESG", "마케팅", "디자인"];
@@ -199,6 +199,7 @@ function SkillPicker({
 
 export default function WritePost() {
   const router = useRouter();
+  const { boardId } = useLocalSearchParams<{ boardId?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState<Form>({
@@ -214,10 +215,44 @@ export default function WritePost() {
   });
   const [links, setLinks] = useState<string[]>([]);
   const [linkInput, setLinkInput] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [images, setImages] = useState<UploadImage[]>([]);
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
+  const [loading, setLoading] = useState(Boolean(boardId));
+  const [aiLoading, setAiLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState("");
+  const isEditing = Boolean(boardId);
+  const canUseAi = images.length > 0 || links.length > 0;
 
-  const set = <K extends keyof Form>(key: K, value: Form[K]) =>
+  useEffect(() => {
+    if (!boardId) return;
+    let active = true;
+    boardsApi.detail(boardId).then(({ board }) => {
+      if (!active) return;
+      setForm({
+        title: board.title,
+        category: board.category,
+        members: `${board.recruitCount}명`,
+        intro: board.content,
+        give: board.giveTags,
+        need: board.needTags,
+        region: board.activityRegion,
+        method: board.activityMethod,
+        time: board.activityHours,
+      });
+      setLinks(board.relatedLinks);
+      setExistingImageUrls(board.imageUrls);
+    }).catch((error) => {
+      Alert.alert("포스팅 조회 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+      router.back();
+    }).finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [boardId, router]);
+
+  const set = <K extends keyof Form>(key: K, value: Form[K]) => {
+    setFormError("");
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
 
   const toggle = (key: "give" | "need", item: string) =>
     set(
@@ -230,52 +265,132 @@ export default function WritePost() {
   const addLink = () => {
     const url = linkInput.trim();
     if (!url) return;
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+    } catch {
+      Alert.alert("링크 확인", "http:// 또는 https://로 시작하는 링크를 입력해주세요.");
+      return;
+    }
     setLinks((prev) => [...prev, url]);
     setLinkInput("");
   };
 
-  // "사진 추가"를 누르면 갤러리(사진첩)가 열려요. 카메라 촬영은 안 열어요.
-  const pickPhotos = async () => {
-    if (photos.length >= MAX_PHOTOS) {
-      Alert.alert("사진은 최대 10장까지 첨부할 수 있어요.");
-      return;
-    }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "사진 접근 권한이 필요해요",
-        "설정에서 사진(갤러리) 접근을 허용해주세요."
-      );
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,
-      selectionLimit: MAX_PHOTOS - photos.length,
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      const uris = result.assets.map((a) => a.uri);
-      setPhotos((prev) => [...prev, ...uris].slice(0, MAX_PHOTOS));
-    }
-  };
-
-  const removePhoto = (uri: string) =>
-    setPhotos((prev) => prev.filter((p) => p !== uri));
-
   const goStep = (next: 1 | 2) => {
+    setFormError("");
     setStep(next);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   };
 
+  const firstStepError = () => {
+    if (!form.title.trim()) return "제목을 입력해주세요.";
+    if (!form.category) return "카테고리를 선택해주세요.";
+    if (!Number.parseInt(form.members, 10)) return "모집 인원을 선택해주세요.";
+    if (!form.intro.trim()) return "프로젝트 소개를 입력해주세요.";
+    return "";
+  };
+
+  const nextStep = () => {
+    const error = firstStepError();
+    if (error) {
+      setFormError(error);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    goStep(2);
+  };
+
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
-  const submit = () => {
-    // 지금은 서버에 저장하지 않고 입력값을 확인만 해요.
-    console.log("등록할 내용", { ...form, links, photos });
-    Alert.alert("등록 완료", "지금은 예시라서 서버에는 저장되지 않아요.");
-    router.replace("/");
+  const pickImages = async () => {
+    const remaining = 10 - images.length - existingImageUrls.length;
+    if (remaining <= 0) {
+      Alert.alert("사진 첨부", "사진은 최대 10장까지 첨부할 수 있습니다.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
+      quality: 0.9,
+    });
+    if (result.canceled) return;
+    const picked = result.assets.slice(0, remaining).map((asset, index) => ({
+      uri: asset.uri,
+      name: asset.fileName ?? `image-${Date.now()}-${index}.jpg`,
+      type: asset.mimeType ?? "image/jpeg",
+      file: asset.file,
+    }));
+    setImages((prev) => [...prev, ...picked]);
   };
+
+  const createAiDraft = async () => {
+    if (!canUseAi || aiLoading) return;
+    try {
+      setAiLoading(true);
+      const draft = await aiApi.createDraft(images, links);
+      setForm((previous) => ({
+        title: draft.title || previous.title,
+        category: draft.category || previous.category,
+        members: draft.recruitCount > 0 ? `${draft.recruitCount}명` : previous.members,
+        intro: draft.content || previous.intro,
+        give: draft.giveTags?.length ? draft.giveTags : previous.give,
+        need: draft.needTags?.length ? draft.needTags : previous.need,
+        region: draft.activityRegion || previous.region,
+        method: draft.activityMethod || previous.method,
+        time: draft.activityHours || previous.time,
+      }));
+      if (draft.relatedLinks.length) setLinks(draft.relatedLinks);
+      Alert.alert("AI 작성 완료", "자동 작성된 내용을 확인하고 자유롭게 수정해주세요.");
+    } catch (error) {
+      Alert.alert("AI 작성 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const submit = async () => {
+    const recruitCount = Number.parseInt(form.members, 10);
+    const stepOneError = firstStepError();
+    if (stepOneError) {
+      setStep(1);
+      setFormError(stepOneError);
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      return;
+    }
+    if (!form.region || !form.method || !form.time) {
+      setFormError("활동 지역, 진행 방식, 활동 시간을 모두 선택해주세요.");
+      return;
+    }
+    const payload: BoardInput = {
+      title: form.title,
+      category: form.category,
+      recruitCount,
+      content: form.intro,
+      giveTags: form.give,
+      needTags: form.need,
+      activityRegion: form.region,
+      activityMethod: form.method,
+      activityHours: form.time,
+      relatedLinks: links,
+    };
+    try {
+      setSubmitting(true);
+      setFormError("");
+      if (boardId) await boardsApi.update(boardId, payload);
+      else await boardsApi.create(payload, images);
+      Alert.alert(isEditing ? "수정 완료" : "등록 완료", isEditing ? "포스팅이 수정되었습니다." : "포스팅이 등록되었습니다.");
+      router.replace(isEditing ? "/mypage" : "/");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "다시 시도해주세요.";
+      setFormError(message);
+      Alert.alert(isEditing ? "수정 실패" : "등록 실패", message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <SafeAreaView style={styles.safe}><ActivityIndicator color="#1A1A1A" style={{ flex: 1 }} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -285,18 +400,10 @@ export default function WritePost() {
       >
         {/* 헤더 + 진행 막대 */}
         <View style={styles.header}>
-          {/* 1단계에서는 X(닫기), 2단계에서는 <(이전 단계로) 버튼이에요. */}
-          <Pressable
-            hitSlop={8}
-            onPress={step === 1 ? close : () => goStep(1)}
-          >
-            <Ionicons
-              name={step === 1 ? "close" : "chevron-back"}
-              size={22}
-              color="#111111"
-            />
+          <Pressable hitSlop={8} onPress={close}>
+            <Ionicons name="close" size={22} color="#111111" />
           </Pressable>
-          <Text style={styles.headerTitle}>포스팅 작성</Text>
+          <Text style={styles.headerTitle}>{isEditing ? "포스팅 수정" : "포스팅 작성"}</Text>
           <View style={styles.progress}>
             <View style={[styles.progressBar, styles.progressOn]} />
             <View
@@ -313,29 +420,15 @@ export default function WritePost() {
         >
           {step === 1 ? (
             <>
-              {/* AI로 작성: 사진이나 링크를 첨부하면 활성화돼요 */}
+              {/* AI로 작성 */}
               <Pressable
-                style={[styles.aiButton, aiEnabled && styles.aiButtonActive]}
-                disabled={!aiEnabled}
-                onPress={() =>
-                  Alert.alert(
-                    "준비 중이에요",
-                    "로그인 기능이 추가되면 사진/링크를 분석해서 자동으로 내용을 채워드려요."
-                  )
-                }
+                style={[styles.aiButton, canUseAi && styles.aiButtonActive]}
+                onPress={createAiDraft}
+                disabled={!canUseAi || aiLoading}
               >
-                <Ionicons
-                  name="sparkles"
-                  size={14}
-                  color={aiEnabled ? "#7A5C1E" : "#999999"}
-                />
-                <Text
-                  style={[
-                    styles.aiButtonText,
-                    aiEnabled && styles.aiButtonTextActive,
-                  ]}
-                >
-                  AI로 작성해요
+                {aiLoading ? <ActivityIndicator size="small" color="#1A1A1A" /> : <Ionicons name="sparkles" size={14} color={canUseAi ? "#1A1A1A" : "#999999"} />}
+                <Text style={[styles.aiButtonText, canUseAi && styles.aiButtonTextActive]}>
+                  {aiLoading ? "AI가 작성 중이에요" : "AI로 작성해요"}
                 </Text>
               </Pressable>
               <Text style={styles.aiHint}>
@@ -344,31 +437,23 @@ export default function WritePost() {
 
               {/* 사진 첨부 */}
               <View style={styles.field}>
-                <Label text="사진 첨부" right={`${photos.length}/${MAX_PHOTOS}`} />
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.photoRow}
-                >
-                  {photos.map((uri) => (
-                    <View key={uri} style={styles.photoThumbWrap}>
-                      <Image source={{ uri }} style={styles.photoThumb} />
-                      <Pressable
-                        style={styles.photoRemove}
-                        onPress={() => removePhoto(uri)}
-                        hitSlop={6}
-                      >
+                <Label text="사진 첨부" right={`${images.length + existingImageUrls.length}/10`} />
+                <View style={styles.photoRow}>
+                <Pressable style={styles.photoBox} onPress={pickImages}>
+                  <Ionicons name="camera-outline" size={22} color="#666666" />
+                  <Text style={styles.photoText}>사진 추가</Text>
+                </Pressable>
+                {[...existingImageUrls, ...images.map((image) => image.uri)].map((uri, index) => (
+                  <View key={`${uri}-${index}`} style={styles.previewWrap}>
+                    <Image source={{ uri }} style={styles.previewImage} />
+                    {index >= existingImageUrls.length && (
+                      <Pressable style={styles.previewRemove} onPress={() => setImages((prev) => prev.filter((_, i) => i !== index - existingImageUrls.length))}>
                         <Ionicons name="close" size={12} color="#FFFFFF" />
                       </Pressable>
-                    </View>
-                  ))}
-                  {photos.length < MAX_PHOTOS && (
-                    <Pressable style={styles.photoBox} onPress={pickPhotos}>
-                      <Ionicons name="image-outline" size={22} color="#666666" />
-                      <Text style={styles.photoText}>사진 추가</Text>
-                    </Pressable>
-                  )}
-                </ScrollView>
+                    )}
+                  </View>
+                ))}
+                </View>
               </View>
 
               {/* 링크 첨부 */}
@@ -509,14 +594,25 @@ export default function WritePost() {
 
         {/* 하단 버튼 */}
         <View style={styles.footer}>
+          {formError ? (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle-outline" size={16} color="#C62828" />
+              <Text style={styles.errorText}>{formError}</Text>
+            </View>
+          ) : null}
           {step === 1 ? (
-            <Pressable style={styles.nextButton} onPress={() => goStep(2)}>
+            <Pressable style={styles.nextButton} onPress={nextStep}>
               <Text style={styles.nextButtonText}>다음</Text>
             </Pressable>
           ) : (
-            <Pressable style={styles.submitOnlyButton} onPress={submit}>
-              <Text style={styles.submitButtonText}>등록하기</Text>
-            </Pressable>
+            <View style={styles.footerRow}>
+              <Pressable style={styles.prevButton} onPress={() => goStep(1)}>
+                <Text style={styles.prevButtonText}>이전</Text>
+              </Pressable>
+              <Pressable style={[styles.submitButton, submitting && styles.disabledButton]} onPress={submit} disabled={submitting}>
+                {submitting ? <ActivityIndicator color="#1A1A1A" /> : <Text style={styles.submitButtonText}>{isEditing ? "수정하기" : "등록하기"}</Text>}
+              </Pressable>
+            </View>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -553,7 +649,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E5E5",
     marginLeft: 3,
   },
-  progressOn: { backgroundColor: "#F8D99C" },
+  progressOn: { backgroundColor: "#1A1A1A" },
 
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
@@ -579,6 +675,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F0F0F0",
   },
   aiButtonText: { fontSize: 13, color: "#999999", marginLeft: 6 },
+  aiButtonActive: { backgroundColor: "#F6D68F" },
+  aiButtonTextActive: { color: "#1A1A1A", fontWeight: "bold" },
   aiHint: {
     fontSize: 11,
     color: "#AAAAAA",
@@ -587,7 +685,6 @@ const styles = StyleSheet.create({
   },
 
   // 사진
-  photoRow: { flexDirection: "row" },
   photoBox: {
     width: 72,
     height: 72,
@@ -599,21 +696,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   photoText: { fontSize: 10, color: "#666666", marginTop: 4 },
-  photoThumbWrap: { marginRight: 8 },
-  photoThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
-    backgroundColor: "#EEEEEE",
-  },
-  photoRemove: {
+  photoRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  previewWrap: { width: 72, height: 72 },
+  previewImage: { width: 72, height: 72, borderRadius: 10 },
+  previewRemove: {
     position: "absolute",
-    top: -6,
-    right: -6,
+    top: 4,
+    right: 4,
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.65)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -752,6 +845,16 @@ const styles = StyleSheet.create({
     borderTopColor: "#F0F0F0",
     backgroundColor: "#FFFFFF",
   },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 8,
+    backgroundColor: "#FFEBEE",
+    marginBottom: 10,
+  },
+  errorText: { flex: 1, marginLeft: 6, fontSize: 12, color: "#C62828" },
   footerRow: { flexDirection: "row" },
   nextButton: {
     height: 48,
@@ -779,12 +882,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 8,
   },
-  submitOnlyButton: {
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: "#F6D68F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   submitButtonText: { fontSize: 14, fontWeight: "bold", color: "#222222" },
+  disabledButton: { opacity: 0.6 },
 });
