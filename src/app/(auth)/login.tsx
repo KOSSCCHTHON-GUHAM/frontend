@@ -1,40 +1,66 @@
+import { useMutation } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { authApi } from "@/api";
+
+import { authApi } from "../../api/auth";
+
+type LoginVariables = {
+  email: string;
+  password: string;
+};
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert("입력 확인", "이메일과 비밀번호를 모두 입력해주세요.");
+  const loginMutation = useMutation({
+    mutationFn: ({ email, password }: LoginVariables) =>
+      authApi.login(email, password),
+
+    onSuccess: (data) => {
+      if (data.user.onboardingCompleted) {
+        router.replace("/?loggedIn=true");
+        return;
+      }
+
+      router.replace("/onboarding");
+    },
+
+    onError: (error) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "로그인에 실패했습니다.";
+
+      Alert.alert("로그인 실패", message);
+    },
+  });
+
+  const handleLogin = () => {
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail || !password) {
+      Alert.alert("알림", "이메일과 비밀번호를 입력해주세요.");
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const { user } = await authApi.login(email.trim(), password);
-      router.replace(user.onboardingCompleted ? "/" : "/onboarding");
-    } catch (error) {
-      Alert.alert("로그인 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    loginMutation.mutate({
+      email: trimmedEmail,
+      password,
+    });
   };
 
   const handleSignup = () => {
@@ -45,9 +71,15 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       >
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
           <View style={styles.brandArea}>
             <Image
               source={require("../../../assets/logo.png")}
@@ -72,6 +104,9 @@ export default function LoginScreen() {
               placeholderTextColor="#B8B8B8"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
+              editable={!loginMutation.isPending}
+              returnKeyType="next"
               style={styles.input}
             />
 
@@ -83,31 +118,40 @@ export default function LoginScreen() {
               placeholder="비밀번호를 입력해주세요"
               placeholderTextColor="#B8B8B8"
               secureTextEntry
+              editable={!loginMutation.isPending}
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
               style={styles.input}
             />
 
             <TouchableOpacity
               activeOpacity={0.85}
-              style={[styles.loginButton, isSubmitting && styles.disabledButton]}
+              style={[
+                styles.loginButton,
+                loginMutation.isPending && styles.disabledButton,
+              ]}
               onPress={handleLogin}
-              disabled={isSubmitting}
+              disabled={loginMutation.isPending}
             >
-              {isSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.loginButtonText}>로그인</Text>
-              )}
+              <Text style={styles.loginButtonText}>
+                {loginMutation.isPending ? "로그인 중..." : "로그인"}
+              </Text>
             </TouchableOpacity>
 
             <View style={styles.signupArea}>
-              <Text style={styles.signupGuide}>아직 계정이 없으신가요?</Text>
+              <Text style={styles.signupGuide}>
+                아직 계정이 없으신가요?
+              </Text>
 
-              <TouchableOpacity onPress={handleSignup}>
+              <TouchableOpacity
+                onPress={handleSignup}
+                disabled={loginMutation.isPending}
+              >
                 <Text style={styles.signupText}>회원가입</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -122,12 +166,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 28,
+    paddingBottom: 30,
   },
   brandArea: {
-    marginTop: 124,
     alignItems: "center",
+    marginTop: 124,
   },
   logo: {
     width: 76,
@@ -148,7 +193,7 @@ const styles = StyleSheet.create({
     color: "#625744",
   },
   form: {
-    marginTop: 65,
+    marginTop: 40,
   },
   label: {
     marginBottom: 8,
@@ -182,13 +227,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  disabledButton: {
+    opacity: 0.6,
+  },
   loginButtonText: {
     fontFamily: "PretendardBold",
     fontSize: 15,
     color: "#FFFFFF",
-  },
-  disabledButton: {
-    opacity: 0.6,
   },
   signupArea: {
     marginTop: 14,
