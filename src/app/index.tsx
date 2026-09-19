@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { Redirect, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   Image,
   Pressable,
@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { sessionStore } from "@/auth/session";
 
 type Tag = { type: "GIVE" | "NEED"; label: string };
 
@@ -103,11 +104,18 @@ function Avatar({ size = 24 }: { size?: number }) {
 
 export default function Home() {
   const router = useRouter();
-  const { loggedIn } = useLocalSearchParams<{ loggedIn?: string }>();
-
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [category, setCategory] = useState("전체");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"recommend" | "latest">("recommend");
+
+  useEffect(() => {
+    sessionStore.getAccessToken().then((token) => {
+      setIsAuthenticated(Boolean(token));
+      setAuthChecked(true);
+    });
+  }, []);
 
   const filtered = posts
     .filter((post) => category === "전체" || post.category === category)
@@ -126,7 +134,9 @@ export default function Home() {
     if (label === "마이") router.replace("/mypage");
   };
 
-  if (loggedIn !== "true") {
+  if (!authChecked) return null;
+
+  if (!isAuthenticated) {
     return <Redirect href="/login" />;
   }
 

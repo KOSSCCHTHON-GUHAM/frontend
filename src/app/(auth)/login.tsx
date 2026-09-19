@@ -1,6 +1,8 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     Image,
     KeyboardAvoidingView,
     Platform,
@@ -11,13 +13,28 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { authApi } from "@/api";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = () => {
-    router.replace("/onboarding");
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert("입력 확인", "이메일과 비밀번호를 모두 입력해주세요.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const { user } = await authApi.login(email.trim(), password);
+      router.replace(user.onboardingCompleted ? "/" : "/onboarding");
+    } catch (error) {
+      Alert.alert("로그인 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSignup = () => {
@@ -71,10 +88,15 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               activeOpacity={0.85}
-              style={styles.loginButton}
+              style={[styles.loginButton, isSubmitting && styles.disabledButton]}
               onPress={handleLogin}
+              disabled={isSubmitting}
             >
-              <Text style={styles.loginButtonText}>로그인</Text>
+              {isSubmitting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.loginButtonText}>로그인</Text>
+              )}
             </TouchableOpacity>
 
             <View style={styles.signupArea}>
@@ -164,6 +186,9 @@ const styles = StyleSheet.create({
     fontFamily: "PretendardBold",
     fontSize: 15,
     color: "#FFFFFF",
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   signupArea: {
     marginTop: 14,
