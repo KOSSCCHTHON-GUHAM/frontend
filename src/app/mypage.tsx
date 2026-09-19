@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { authApi } from "@/api";
 
 // 지금은 예시 데이터예요. 나중에 백엔드 API에서 받아온 값으로 바꾸면 돼요.
 const user = {
@@ -60,6 +61,15 @@ function SmallButton({
 
 export default function MyPage() {
   const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+      router.replace("/login");
+    } catch (error) {
+      Alert.alert("로그아웃 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+    }
+  };
   const [posts, setPosts] = useState<MyPost[]>(initialPosts);
   const [tab, setTab] = useState<"open" | "closed">("open");
 
@@ -191,8 +201,7 @@ export default function MyPage() {
             ))}
           </View>
 
-          {/* 로그아웃 (로그인 화면이 생기면 연결해요) */}
-          <Pressable style={[styles.section, styles.logoutRow]} onPress={() => {}}>
+          <Pressable style={[styles.section, styles.logoutRow]} onPress={handleLogout}>
             <Text style={styles.logoutText}>로그아웃</Text>
             <Ionicons name="chevron-forward" size={18} color="#999999" />
           </Pressable>
