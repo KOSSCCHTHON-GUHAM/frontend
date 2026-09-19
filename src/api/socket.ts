@@ -18,6 +18,7 @@ export type ChatClientEvents = {
     payload: { roomId: string },
     ack?: (response: { roomId?: string; error?: string }) => void,
   ) => void;
+
   "message:send": (
     payload: {
       roomId: string;
@@ -25,12 +26,18 @@ export type ChatClientEvents = {
       content: string;
       messageType: MessageType;
     },
-    ack?: (response: { message?: ChatMessage; duplicated?: boolean; error?: string }) => void,
+    ack?: (response: {
+      message?: ChatMessage;
+      duplicated?: boolean;
+      error?: string;
+    }) => void,
   ) => void;
+
   "message:read": (
     payload: { roomId: string; lastReadMessageId: string },
     ack?: (response: { roomId?: string; error?: string }) => void,
   ) => void;
+
   "chat:leave": (
     payload: { roomId: string },
     ack?: (response: { roomId?: string }) => void,
@@ -41,6 +48,11 @@ export async function createChatSocket(): Promise<
   Socket<ChatServerEvents, ChatClientEvents>
 > {
   const accessToken = await sessionStore.getAccessToken();
+
+  if (!accessToken) {
+    throw new Error("로그인이 필요합니다.");
+  }
+
   return io(API_BASE_URL, {
     path: "/chat",
     transports: ["websocket"],
