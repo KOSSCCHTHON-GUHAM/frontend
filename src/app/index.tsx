@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,84 +6,41 @@ import {
   ScrollView,
   Pressable,
   Image,
+  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { apiFetch } from "../api/client";
 
 type Tag = { type: "GIVE" | "NEED"; label: string };
 
-type Post = {
-  id: number;
-  category: string;
-  region: string;
-  ago: string; // 화면에 보이는 "2시간 전"
-  hoursAgo: number; // 최신순 정렬용 숫자
+// 백엔드 GET /api/boards가 돌려주는 게시글 하나의 모양이에요.
+type BoardDetail = {
+  id: string;
   title: string;
-  tags: Tag[];
-  author: string;
-  joined: number;
-  capacity: number;
+  category: string;
+  content: string;
+  giveTags: string[];
+  needTags: string[];
+  activityRegion: string;
+  activityMethod: string;
+  activityHours: string;
+  recruitCount: number;
+  recruitment: { current: number; target: number; status: string };
+  createdAt: string;
+  author?: { id: string; nickname: string };
+};
+
+type BoardsResponse = {
+  boards: BoardDetail[];
+  total: number;
+  page: number;
+  hasNext: boolean;
 };
 
 const categories = ["전체", "IT/AI", "창업", "ESG", "마케팅", "디자인"];
-
-// 지금은 예시 데이터예요. 나중에 백엔드 API(GET /api/boards)에서 받아온 값으로 바꾸면 돼요.
-const posts: Post[] = [
-  {
-    id: 1,
-    category: "IT/AI",
-    region: "서울 / 온라인",
-    ago: "2시간 전",
-    hoursAgo: 2,
-    title: "AI 기반 탄소발자국 측정 앱",
-    tags: [
-      { type: "GIVE", label: "기획" },
-      { type: "GIVE", label: "AI/ML" },
-      { type: "NEED", label: "Frontend" },
-      { type: "NEED", label: "UI/UX" },
-    ],
-    author: "박지수",
-    joined: 2,
-    capacity: 4,
-  },
-  {
-    id: 2,
-    category: "창업",
-    region: "전국",
-    ago: "5시간 전",
-    hoursAgo: 5,
-    title: "대학생 중고거래 커뮤니티 플랫폼",
-    tags: [
-      { type: "GIVE", label: "Frontend" },
-      { type: "GIVE", label: "UI/UX" },
-      { type: "NEED", label: "Backend" },
-      { type: "NEED", label: "기획" },
-    ],
-    author: "김민준",
-    joined: 1,
-    capacity: 3,
-  },
-  {
-    id: 3,
-    category: "ESG",
-    region: "경기 / 서울",
-    ago: "1일 전",
-    hoursAgo: 24,
-    title: "지역 소상공인 디지털 전환 컨설팅",
-    tags: [
-      { type: "GIVE", label: "기획" },
-      { type: "GIVE", label: "Data" },
-      { type: "NEED", label: "마케팅" },
-      { type: "NEED", label: "UI/UX" },
-      { type: "NEED", label: "Frontend" },
-    ],
-    author: "이하은",
-    joined: 0,
-    capacity: 5,
-  },
-];
 
 // 하단 탭: 나중에 Expo Router의 진짜 탭 이동으로 바꿀 자리예요.
 const tabs = [
@@ -104,22 +61,48 @@ function Avatar({ size = 24 }: { size?: number }) {
   );
 }
 
+// "2024-05-01T10:00:00Z" 같은 시각을 "2시간 전" 같은 문구로 바꿔줘요.
+function timeAgo(iso: string) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "방금 전";
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  return `${days}일 전`;
+}
+
 export default function Home() {
   const router = useRouter();
   const [category, setCategory] = useState("전체");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"recommend" | "latest">("recommend");
 
-  // 카테고리와 검색어로 걸러내고, 최신순이면 시간 순서로 정렬해요.
-  const filtered = posts
-    .filter((p) => category === "전체" || p.category === category)
-    .filter((p) =>
-      p.title.toLowerCase().includes(query.trim().toLowerCase())
-    );
-  const visible =
-    sort === "latest"
-      ? [...filtered].sort((a, b) => a.hoursAgo - b.hoursAgo)
-      : filtered;
+  const [boards, setBoards] = useState<BoardDetail[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 카테고리 / 검색어 / 정렬이 바뀔 때마다 백엔드에서 목록을 다시 받아와요.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams();
+      if (category !== "전체") params.set("category", category);
+      if (query.trim()) params.set("keyword", query.trim());
+      params.set("sort", sort === "latest" ? "LATEST" : "RECOMMENDED");
+
+      setLoading(true);
+      setError(null);
+      apiFetch<BoardsResponse>(`/api/boards?${params.toString()}`)
+        .then((res) => setBoards(res.boards))
+        .catch((err) =>
+          setError(err instanceof Error ? err.message : "목록을 불러오지 못했어요")
+        )
+        .finally(() => setLoading(false));
+    }, 300); // 타이핑 중간마다 요청 보내지 않도록 살짝 기다려요.
+
+    return () => clearTimeout(timer);
+  }, [category, query, sort]);
 
   // 하단 탭을 누르면 해당 화면으로 이동해요.
   const goTab = (label: string) => {
@@ -227,55 +210,74 @@ export default function Home() {
 
         {/* 포스팅 목록 */}
         <ScrollView contentContainerStyle={styles.list}>
-          {visible.length === 0 && (
+          {loading && <ActivityIndicator style={{ marginTop: 40 }} color="#1A1A1A" />}
+
+          {!loading && error && (
+            <Text style={styles.empty}>{error}{"\n"}백엔드 서버가 켜져 있는지 확인해주세요.</Text>
+          )}
+
+          {!loading && !error && boards.length === 0 && (
             <Text style={styles.empty}>조건에 맞는 포스팅이 없어요</Text>
           )}
-          {visible.map((post) => (
-            <Pressable
-              key={post.id}
-              style={styles.card}
-              onPress={() => router.push("/post-detail")}
-            >
-              <View style={styles.cardTop}>
-                <Text style={styles.meta}>
-                  {post.category} · {post.region}
-                </Text>
-                <Text style={styles.ago}>{post.ago}</Text>
-              </View>
-              <Text style={styles.title}>{post.title}</Text>
-              <View style={styles.tagRow}>
-                {post.tags.map((tag) => (
-                  <View
-                    key={tag.type + tag.label}
-                    style={[
-                      styles.tag,
-                      tag.type === "GIVE" ? styles.tagGive : styles.tagNeed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.tagText,
-                        tag.type === "GIVE"
-                          ? styles.tagTextGive
-                          : styles.tagTextNeed,
-                      ]}
-                    >
-                      {tag.type} · {tag.label}
+
+          {!loading &&
+            !error &&
+            boards.map((post) => {
+              const tags: Tag[] = [
+                ...post.giveTags.map((label) => ({ type: "GIVE" as const, label })),
+                ...post.needTags.map((label) => ({ type: "NEED" as const, label })),
+              ];
+              return (
+                <Pressable
+                  key={post.id}
+                  style={styles.card}
+                  onPress={() =>
+                    router.push({ pathname: "/post-detail", params: { id: post.id } })
+                  }
+                >
+                  <View style={styles.cardTop}>
+                    <Text style={styles.meta}>
+                      {post.category} · {post.activityRegion}
+                    </Text>
+                    <Text style={styles.ago}>{timeAgo(post.createdAt)}</Text>
+                  </View>
+                  <Text style={styles.title}>{post.title}</Text>
+                  <View style={styles.tagRow}>
+                    {tags.map((tag) => (
+                      <View
+                        key={tag.type + tag.label}
+                        style={[
+                          styles.tag,
+                          tag.type === "GIVE" ? styles.tagGive : styles.tagNeed,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.tagText,
+                            tag.type === "GIVE"
+                              ? styles.tagTextGive
+                              : styles.tagTextNeed,
+                          ]}
+                        >
+                          {tag.type} · {tag.label}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.cardBottom}>
+                    <View style={styles.authorRow}>
+                      <Avatar size={24} />
+                      <Text style={styles.author}>
+                        {post.author?.nickname ?? "익명"}
+                      </Text>
+                    </View>
+                    <Text style={styles.recruit}>
+                      모집 {post.recruitment.current}/{post.recruitment.target}명
                     </Text>
                   </View>
-                ))}
-              </View>
-              <View style={styles.cardBottom}>
-                <View style={styles.authorRow}>
-                  <Avatar size={24} />
-                  <Text style={styles.author}>{post.author}</Text>
-                </View>
-                <Text style={styles.recruit}>
-                  모집 {post.joined}/{post.capacity}명
-                </Text>
-              </View>
-            </Pressable>
-          ))}
+                </Pressable>
+              );
+            })}
         </ScrollView>
 
         {/* 하단 탭 */}

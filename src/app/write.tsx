@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -13,6 +14,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
+
+const MAX_PHOTOS = 10;
 
 // 선택지 목록이에요. 필요하면 여기만 고치면 돼요.
 const categoryOptions = ["IT/AI", "창업", "ESG", "마케팅", "디자인"];
@@ -210,6 +214,7 @@ export default function WritePost() {
   });
   const [links, setLinks] = useState<string[]>([]);
   const [linkInput, setLinkInput] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -229,6 +234,35 @@ export default function WritePost() {
     setLinkInput("");
   };
 
+  // "사진 추가"를 누르면 갤러리(사진첩)가 열려요. 카메라 촬영은 안 열어요.
+  const pickPhotos = async () => {
+    if (photos.length >= MAX_PHOTOS) {
+      Alert.alert("사진은 최대 10장까지 첨부할 수 있어요.");
+      return;
+    }
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        "사진 접근 권한이 필요해요",
+        "설정에서 사진(갤러리) 접근을 허용해주세요."
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_PHOTOS - photos.length,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      const uris = result.assets.map((a) => a.uri);
+      setPhotos((prev) => [...prev, ...uris].slice(0, MAX_PHOTOS));
+    }
+  };
+
+  const removePhoto = (uri: string) =>
+    setPhotos((prev) => prev.filter((p) => p !== uri));
+
   const goStep = (next: 1 | 2) => {
     setStep(next);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -238,7 +272,7 @@ export default function WritePost() {
 
   const submit = () => {
     // 지금은 서버에 저장하지 않고 입력값을 확인만 해요.
-    console.log("등록할 내용", { ...form, links });
+    console.log("등록할 내용", { ...form, links, photos });
     Alert.alert("등록 완료", "지금은 예시라서 서버에는 저장되지 않아요.");
     router.replace("/");
   };
@@ -251,8 +285,16 @@ export default function WritePost() {
       >
         {/* 헤더 + 진행 막대 */}
         <View style={styles.header}>
-          <Pressable hitSlop={8} onPress={close}>
-            <Ionicons name="close" size={22} color="#111111" />
+          {/* 1단계에서는 X(닫기), 2단계에서는 <(이전 단계로) 버튼이에요. */}
+          <Pressable
+            hitSlop={8}
+            onPress={step === 1 ? close : () => goStep(1)}
+          >
+            <Ionicons
+              name={step === 1 ? "close" : "chevron-back"}
+              size={22}
+              color="#111111"
+            />
           </Pressable>
           <Text style={styles.headerTitle}>포스팅 작성</Text>
           <View style={styles.progress}>
@@ -271,10 +313,30 @@ export default function WritePost() {
         >
           {step === 1 ? (
             <>
-              {/* AI로 작성 */}
-              <Pressable style={styles.aiButton} onPress={() => {}}>
-                <Ionicons name="sparkles" size={14} color="#999999" />
-                <Text style={styles.aiButtonText}>AI로 작성해요</Text>
+              {/* AI로 작성: 사진이나 링크를 첨부하면 활성화돼요 */}
+              <Pressable
+                style={[styles.aiButton, aiEnabled && styles.aiButtonActive]}
+                disabled={!aiEnabled}
+                onPress={() =>
+                  Alert.alert(
+                    "준비 중이에요",
+                    "로그인 기능이 추가되면 사진/링크를 분석해서 자동으로 내용을 채워드려요."
+                  )
+                }
+              >
+                <Ionicons
+                  name="sparkles"
+                  size={14}
+                  color={aiEnabled ? "#7A5C1E" : "#999999"}
+                />
+                <Text
+                  style={[
+                    styles.aiButtonText,
+                    aiEnabled && styles.aiButtonTextActive,
+                  ]}
+                >
+                  AI로 작성해요
+                </Text>
               </Pressable>
               <Text style={styles.aiHint}>
                 사진 또는 링크를 첨부하면 AI가 자동으로 작성해드려요
@@ -282,11 +344,31 @@ export default function WritePost() {
 
               {/* 사진 첨부 */}
               <View style={styles.field}>
-                <Label text="사진 첨부" right="0/10" />
-                <Pressable style={styles.photoBox} onPress={() => {}}>
-                  <Ionicons name="camera-outline" size={22} color="#666666" />
-                  <Text style={styles.photoText}>사진 추가</Text>
-                </Pressable>
+                <Label text="사진 첨부" right={`${photos.length}/${MAX_PHOTOS}`} />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.photoRow}
+                >
+                  {photos.map((uri) => (
+                    <View key={uri} style={styles.photoThumbWrap}>
+                      <Image source={{ uri }} style={styles.photoThumb} />
+                      <Pressable
+                        style={styles.photoRemove}
+                        onPress={() => removePhoto(uri)}
+                        hitSlop={6}
+                      >
+                        <Ionicons name="close" size={12} color="#FFFFFF" />
+                      </Pressable>
+                    </View>
+                  ))}
+                  {photos.length < MAX_PHOTOS && (
+                    <Pressable style={styles.photoBox} onPress={pickPhotos}>
+                      <Ionicons name="image-outline" size={22} color="#666666" />
+                      <Text style={styles.photoText}>사진 추가</Text>
+                    </Pressable>
+                  )}
+                </ScrollView>
               </View>
 
               {/* 링크 첨부 */}
@@ -432,14 +514,9 @@ export default function WritePost() {
               <Text style={styles.nextButtonText}>다음</Text>
             </Pressable>
           ) : (
-            <View style={styles.footerRow}>
-              <Pressable style={styles.prevButton} onPress={() => goStep(1)}>
-                <Text style={styles.prevButtonText}>이전</Text>
-              </Pressable>
-              <Pressable style={styles.submitButton} onPress={submit}>
-                <Text style={styles.submitButtonText}>등록하기</Text>
-              </Pressable>
-            </View>
+            <Pressable style={styles.submitOnlyButton} onPress={submit}>
+              <Text style={styles.submitButtonText}>등록하기</Text>
+            </Pressable>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -476,7 +553,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E5E5",
     marginLeft: 3,
   },
-  progressOn: { backgroundColor: "#1A1A1A" },
+  progressOn: { backgroundColor: "#F8D99C" },
 
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
@@ -510,6 +587,7 @@ const styles = StyleSheet.create({
   },
 
   // 사진
+  photoRow: { flexDirection: "row" },
   photoBox: {
     width: 72,
     height: 72,
@@ -521,6 +599,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   photoText: { fontSize: 10, color: "#666666", marginTop: 4 },
+  photoThumbWrap: { marginRight: 8 },
+  photoThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: "#EEEEEE",
+  },
+  photoRemove: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   // 링크
   linkRow: { flexDirection: "row", alignItems: "center" },
@@ -682,6 +778,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 8,
+  },
+  submitOnlyButton: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#F6D68F",
+    alignItems: "center",
+    justifyContent: "center",
   },
   submitButtonText: { fontSize: 14, fontWeight: "bold", color: "#222222" },
 });

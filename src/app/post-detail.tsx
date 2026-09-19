@@ -49,10 +49,16 @@ function Avatar({ size }: { size: number }) {
   );
 }
 
+// 지금 로그인한 사용자 이름이에요. 나중에 로그인 기능이 생기면 실제 로그인한 사용자 정보로 바꾸면 돼요.
+// (마이페이지 예시 데이터랑 같은 이름을 써서 "내가 쓴 글"인지 확인하고 있어요.)
+const CURRENT_USER_NAME = "유진(yujin_dev)";
+
 export default function PostDetail() {
   const router = useRouter();
-  // 방문자/작성자 보기 전환은 미리보기용이에요. 로그인이 생기면 내가 쓴 글인지 보고 자동으로 정해요.
-  const [mode, setMode] = useState<"visitor" | "author">("visitor");
+  // 글쓴이가 지금 로그인한 사용자면 "작성자" 화면, 아니면 "방문자" 화면을 자동으로 보여줘요.
+  // 사람이 직접 누르는 토글이 아니라, 데이터로 자동 판단해요.
+  const mode: "visitor" | "author" =
+    post.author === CURRENT_USER_NAME ? "author" : "visitor";
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const goChatFromSheet = () => {
@@ -75,33 +81,9 @@ export default function PostDetail() {
             <Ionicons name="chevron-back" size={24} color="#111111" />
           </Pressable>
           <Text style={styles.headerTitle}>포스팅 상세</Text>
-          <View style={styles.headerRight}>
-            <View style={styles.modeToggle}>
-              <Pressable
-                style={[styles.modeItem, mode === "visitor" && styles.modeItemOn]}
-                onPress={() => setMode("visitor")}
-              >
-                <Text
-                  style={[styles.modeText, mode === "visitor" && styles.modeTextOn]}
-                >
-                  방문자
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modeItem, mode === "author" && styles.modeItemOn]}
-                onPress={() => setMode("author")}
-              >
-                <Text
-                  style={[styles.modeText, mode === "author" && styles.modeTextOn]}
-                >
-                  작성자
-                </Text>
-              </Pressable>
-            </View>
-            <Pressable hitSlop={8} onPress={() => {}} style={styles.moreButton}>
-              <Ionicons name="ellipsis-horizontal" size={20} color="#111111" />
-            </Pressable>
-          </View>
+          <Pressable hitSlop={8} onPress={() => {}}>
+            <Ionicons name="ellipsis-horizontal" size={20} color="#111111" />
+          </Pressable>
         </View>
 
         <ScrollView>
