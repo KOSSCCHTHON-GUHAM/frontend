@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
+import { View, Text, ScrollView, Pressable, Image, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -74,9 +74,11 @@ export default function ChatList() {
           {rooms.map((r) => (
             <Pressable key={r.id} style={styles.row} onPress={() => openRoom(r.id)}>
               <View style={styles.avatarWrap}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{r.name[0]}</Text>
-                </View>
+                <Image
+                  source={require("../../assets/avatar.png")}
+                  style={styles.avatar}
+                  resizeMode="contain"
+                />
                 {r.unread > 0 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{r.unread}</Text>
@@ -159,15 +161,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F0F0F0",
   },
   avatarWrap: { width: 48, height: 48 },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#F6D68F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 18, fontWeight: "bold", color: "#333333" },
+  avatar: { width: 48, height: 48 },
   badge: {
     position: "absolute",
     top: -3,

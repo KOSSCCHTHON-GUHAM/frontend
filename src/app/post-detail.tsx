@@ -5,6 +5,7 @@ import {
   ScrollView,
   Pressable,
   Modal,
+  Image,
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -32,10 +33,21 @@ const post = {
 
 // AI 추천 매칭 예시예요. 나중에 백엔드 AI 추천 API(/api/ai/recommend) 결과로 바꾸면 돼요.
 const candidates = [
-  { id: 1, name: "김민준", skills: ["Frontend", "React"], color: "#BBDEFB" },
-  { id: 2, name: "이서연", skills: ["UI/UX", "디자인"], color: "#F8BBD0" },
-  { id: 3, name: "박지호", skills: ["Backend", "Python"], color: "#C8E6C9" },
+  { id: 1, name: "김민준", skills: ["Frontend", "React"] },
+  { id: 2, name: "이서연", skills: ["UI/UX", "디자인"] },
+  { id: 3, name: "박지호", skills: ["Backend", "Python"] },
 ];
+
+// 사용자 프로필 이미지예요. 지금은 모든 사용자가 같은 이미지를 써요.
+function Avatar({ size }: { size: number }) {
+  return (
+    <Image
+      source={require("../../assets/avatar.png")}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      resizeMode="contain"
+    />
+  );
+}
 
 export default function PostDetail() {
   const router = useRouter();
@@ -106,9 +118,7 @@ export default function PostDetail() {
             <Text style={styles.title}>{post.title}</Text>
 
             <Pressable style={styles.authorRow} onPress={() => {}}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{post.author[0]}</Text>
-              </View>
+              <Avatar size={40} />
               <View style={styles.authorInfo}>
                 <Text style={styles.authorName}>{post.author}</Text>
                 <View style={styles.row}>
@@ -222,9 +232,7 @@ export default function PostDetail() {
                 <Text style={[styles.rank, i === 0 && styles.rankTop]}>
                   {i + 1}
                 </Text>
-                <View style={[styles.candAvatar, { backgroundColor: c.color }]}>
-                  <Text style={styles.candAvatarText}>{c.name[0]}</Text>
-                </View>
+                <Avatar size={36} />
                 <View style={styles.candInfo}>
                   <Text style={styles.candName}>{c.name}</Text>
                   <View style={styles.row}>
@@ -321,15 +329,6 @@ const styles = StyleSheet.create({
 
   // 작성자
   authorRow: { flexDirection: "row", alignItems: "center", marginTop: 16 },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#F6D68F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 16, fontWeight: "bold", color: "#333333" },
   authorInfo: { flex: 1, marginLeft: 12 },
   authorName: { fontSize: 14, fontWeight: "bold" },
 
@@ -414,15 +413,6 @@ const styles = StyleSheet.create({
   candidateTop: { backgroundColor: "#FFF6E5", borderColor: "#F6D68F" },
   rank: { width: 16, fontSize: 12, color: "#999999", fontWeight: "bold" },
   rankTop: { color: "#E0A030" },
-  candAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 6,
-  },
-  candAvatarText: { fontSize: 14, fontWeight: "bold", color: "#333333" },
   candInfo: { flex: 1, marginLeft: 10 },
   candName: { fontSize: 13, fontWeight: "bold" },
   candChat: {

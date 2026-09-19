@@ -5,6 +5,7 @@ import {
   TextInput,
   ScrollView,
   Pressable,
+  Image,
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -92,6 +93,17 @@ const tabs = [
   { label: "마이", icon: "person-outline", activeIcon: "person" },
 ] as const;
 
+// 사용자 프로필 이미지예요. 지금은 모든 사용자가 같은 이미지를 써요.
+function Avatar({ size = 24 }: { size?: number }) {
+  return (
+    <Image
+      source={require("../../assets/avatar.png")}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      resizeMode="contain"
+    />
+  );
+}
+
 export default function Home() {
   const router = useRouter();
   const [category, setCategory] = useState("전체");
@@ -122,9 +134,11 @@ export default function Home() {
         {/* 상단 헤더 */}
         <View style={styles.header}>
           <View style={styles.logoRow}>
-            <View style={styles.logo}>
-              <Text style={styles.logoText}>G</Text>
-            </View>
+            <Image
+              source={require("../../assets/logo.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <Text style={styles.logoName}>GUHAM</Text>
           </View>
           <Pressable hitSlop={8} onPress={() => {}}>
@@ -253,9 +267,7 @@ export default function Home() {
               </View>
               <View style={styles.cardBottom}>
                 <View style={styles.authorRow}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{post.author[0]}</Text>
-                  </View>
+                  <Avatar size={24} />
                   <Text style={styles.author}>{post.author}</Text>
                 </View>
                 <Text style={styles.recruit}>
@@ -314,15 +326,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   logoRow: { flexDirection: "row", alignItems: "center" },
-  logo: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    backgroundColor: "#F6D68F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoText: { fontSize: 14, fontWeight: "bold", color: "#333333" },
+  logo: { width: 26, height: 26 },
   logoName: { fontSize: 16, fontWeight: "bold", marginLeft: 8 },
 
   // 칩 + 검색 영역
@@ -417,15 +421,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   authorRow: { flexDirection: "row", alignItems: "center" },
-  avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#F6D68F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 10, fontWeight: "bold", color: "#333333" },
   author: { fontSize: 12, color: "#666666", marginLeft: 6 },
   recruit: { fontSize: 11, color: "#888888" },
 

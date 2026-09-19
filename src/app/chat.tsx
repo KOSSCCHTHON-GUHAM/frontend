@@ -5,6 +5,7 @@ import {
   TextInput,
   ScrollView,
   Pressable,
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -23,7 +24,6 @@ type Message = {
 // 지금은 예시 대화예요. 나중에 백엔드 채팅 API에서 받아온 값으로 바꾸면 돼요.
 const partner = {
   name: "박지수",
-  initial: "박",
   post: "AI 기반 탄소발자국 측정 앱",
 };
 
@@ -52,16 +52,14 @@ function nowLabel() {
   return `${ampm} ${h12}:${m}`;
 }
 
-function Avatar({ initial, size }: { initial: string; size: number }) {
+// 사용자 프로필 이미지예요. 지금은 모든 사용자가 같은 이미지를 써요.
+function Avatar({ size }: { size: number }) {
   return (
-    <View
-      style={[
-        styles.avatar,
-        { width: size, height: size, borderRadius: size / 2 },
-      ]}
-    >
-      <Text style={[styles.avatarText, { fontSize: size * 0.4 }]}>{initial}</Text>
-    </View>
+    <Image
+      source={require("../../assets/avatar.png")}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      resizeMode="contain"
+    />
   );
 }
 
@@ -96,7 +94,7 @@ export default function ChatScreen() {
             <Ionicons name="chevron-back" size={24} color="#111111" />
           </Pressable>
           <View style={styles.headerAvatar}>
-            <Avatar initial={partner.initial} size={40} />
+            <Avatar size={40} />
           </View>
           <View style={styles.headerInfo}>
             <Text style={styles.headerName}>{partner.name}</Text>
@@ -121,7 +119,7 @@ export default function ChatScreen() {
           {messages.map((m) =>
             m.from === "other" ? (
               <View key={m.id} style={styles.otherRow}>
-                <Avatar initial={partner.initial} size={24} />
+                <Avatar size={24} />
                 <View style={styles.otherBody}>
                   <View style={[styles.bubble, styles.otherBubble]}>
                     <Text style={styles.otherText}>{m.text}</Text>
@@ -176,14 +174,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     backgroundColor: "#F5F5F5",
   },
-
-  // 아바타 (이름 첫 글자 동그라미)
-  avatar: {
-    backgroundColor: "#F6D68F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontWeight: "bold", color: "#333333" },
 
   // 헤더
   header: {

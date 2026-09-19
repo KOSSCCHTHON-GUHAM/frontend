@@ -6,6 +6,7 @@ import {
   Pressable,
   Alert,
   Platform,
+  Image,
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,7 +16,6 @@ import { useRouter } from "expo-router";
 // 지금은 예시 데이터예요. 나중에 백엔드 API에서 받아온 값으로 바꾸면 돼요.
 const user = {
   name: "유진(yujin_dev)",
-  initial: "유",
   tags: ["Frontend", "UI/UX"],
   interests: ["IT/AI", "창업", "디자인", "ESG"],
   regions: ["서울", "온라인"],
@@ -94,9 +94,11 @@ export default function MyPage() {
           {/* 프로필 */}
           <View style={[styles.section, styles.profileSection]}>
             <View style={styles.profileRow}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{user.initial}</Text>
-              </View>
+              <Image
+                source={require("../../assets/avatar.png")}
+                style={styles.avatar}
+                resizeMode="contain"
+              />
               <View style={styles.profileInfo}>
                 <Text style={styles.name}>{user.name}</Text>
                 <View style={styles.row}>
@@ -256,15 +258,7 @@ const styles = StyleSheet.create({
   // 프로필
   profileSection: { paddingTop: 8 },
   profileRow: { flexDirection: "row", alignItems: "center" },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#F6D68F",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 24, fontWeight: "bold", color: "#333333" },
+  avatar: { width: 60, height: 60 },
   profileInfo: { flex: 1, marginLeft: 14 },
   name: { fontSize: 16, fontWeight: "bold", marginBottom: 6 },
   skillTag: {
