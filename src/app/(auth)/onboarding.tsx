@@ -11,6 +11,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
 import { usersApi } from "@/api";
 
 const GIVE_OPTIONS = [
@@ -92,9 +93,7 @@ export default function OnboardingScreen() {
   };
 
   const handleSelect = (option: string) => {
-    const isSelected = selectedOptions.includes(option);
-
-    const updatedOptions = isSelected
+    const updatedOptions = selectedOptions.includes(option)
       ? selectedOptions.filter((item) => item !== option)
       : [...selectedOptions, option];
 
@@ -115,20 +114,32 @@ export default function OnboardingScreen() {
       Alert.alert("선택 확인", "하나 이상 선택해주세요.");
       return;
     }
-    if (isLastStep) {
-      try {
-        setIsSubmitting(true);
-        await usersApi.saveOnboarding({ giveFields, interests, regions });
-        router.replace("/");
-      } catch (error) {
-        Alert.alert("저장 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
-      } finally {
-        setIsSubmitting(false);
-      }
+
+    if (!isLastStep) {
+      setStep((prev) => prev + 1);
       return;
     }
 
-    setStep((prev) => prev + 1);
+    try {
+      setIsSubmitting(true);
+
+      await usersApi.saveOnboarding({
+        giveFields,
+        interests,
+        regions,
+      });
+
+      router.replace("/");
+    } catch (error) {
+      Alert.alert(
+        "저장 실패",
+        error instanceof Error
+          ? error.message
+          : "온보딩 정보를 저장하지 못했습니다.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -152,6 +163,7 @@ export default function OnboardingScreen() {
               activeOpacity={0.7}
               style={styles.backButton}
               onPress={handleBack}
+              disabled={isSubmitting}
             >
               <Ionicons name="chevron-back" size={18} color="#1C1C1C" />
             </TouchableOpacity>
@@ -160,7 +172,6 @@ export default function OnboardingScreen() {
 
         <View style={styles.titleArea}>
           <Text style={styles.title}>{currentStep.title}</Text>
-
           <Text style={styles.description}>{currentStep.description}</Text>
         </View>
 
@@ -173,6 +184,7 @@ export default function OnboardingScreen() {
                 key={option}
                 style={[styles.option, isSelected && styles.selectedOption]}
                 onPress={() => handleSelect(option)}
+                disabled={isSubmitting}
               >
                 <Text
                   style={[
