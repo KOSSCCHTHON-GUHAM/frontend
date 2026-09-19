@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -6,30 +6,14 @@ import {
   Pressable,
   Alert,
   Platform,
+  ActivityIndicator,
   Image,
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { authApi } from "@/api";
-
-// 지금은 예시 데이터예요. 나중에 백엔드 API에서 받아온 값으로 바꾸면 돼요.
-const user = {
-  name: "유진(yujin_dev)",
-  tags: ["Frontend", "UI/UX"],
-  interests: ["IT/AI", "창업", "디자인", "ESG"],
-  regions: ["서울", "온라인"],
-};
-
-type MyPost = { id: number; title: string; meta: string; closed: boolean };
-
-const initialPosts: MyPost[] = [
-  { id: 1, title: "AI 기반 탄소발자국 측정 앱", meta: "IT/AI · 모집 2/4명", closed: false },
-  { id: 2, title: "대학생 중고거래 커뮤니티 플랫폼", meta: "창업 · 모집 1/3명", closed: false },
-  // 디자인에는 없는 예시예요. "모집 완료" 전환을 눌렀을 때 보이는 모습을 확인하려고 넣었어요.
-  { id: 3, title: "캠퍼스 스터디 매칭 서비스", meta: "IT/AI · 모집 3/3명", closed: true },
-];
+import { useFocusEffect, useRouter } from "expo-router";
+import { authApi, boardsApi, type Board, type UserProfile, usersApi } from "@/api";
 
 const tabs = [
   { label: "홈", icon: "home-outline", activeIcon: "home" },
@@ -61,6 +45,28 @@ function SmallButton({
 
 export default function MyPage() {
   const router = useRouter();
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [posts, setPosts] = useState<Board[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"open" | "closed">("open");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [me, mine] = await Promise.all([
+        usersApi.getMe(),
+        usersApi.getMyBoards({ status: tab === "open" ? "RECRUITING" : "COMPLETED", limit: 100 }),
+      ]);
+      setUser(me.user);
+      setPosts(mine.boards);
+    } catch (error) {
+      Alert.alert("마이페이지 조회 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+    } finally {
+      setLoading(false);
+    }
+  }, [tab]);
+
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   const handleLogout = async () => {
     try {
@@ -70,20 +76,23 @@ export default function MyPage() {
       Alert.alert("로그아웃 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
     }
   };
-  const [posts, setPosts] = useState<MyPost[]>(initialPosts);
-  const [tab, setTab] = useState<"open" | "closed">("open");
+  const visible = posts;
 
-  // 선택한 탭(모집 중 / 모집 완료)에 맞는 글만 보여줘요.
-  const visible = posts.filter((p) => p.closed === (tab === "closed"));
-
-  const askDelete = (id: number) => {
-    const remove = () => setPosts((prev) => prev.filter((p) => p.id !== id));
+  const askDelete = (id: string) => {
+    const remove = async () => {
+      try {
+        await boardsApi.remove(id);
+        setPosts((prev) => prev.filter((post) => post.id !== id));
+      } catch (error) {
+        Alert.alert("삭제 실패", error instanceof Error ? error.message : "다시 시도해주세요.");
+      }
+    };
     if (Platform.OS === "web") {
-      if (window.confirm("이 포스팅을 삭제할까요?")) remove();
+      if (window.confirm("이 포스팅을 삭제할까요?")) void remove();
     } else {
       Alert.alert("삭제", "이 포스팅을 삭제할까요?", [
         { text: "취소", style: "cancel" },
-        { text: "삭제", style: "destructive", onPress: remove },
+        { text: "삭제", style: "destructive", onPress: () => void remove() },
       ]);
     }
   };
@@ -110,9 +119,9 @@ export default function MyPage() {
                 resizeMode="contain"
               />
               <View style={styles.profileInfo}>
-                <Text style={styles.name}>{user.name}</Text>
+                <Text style={styles.name}>{user?.nickname ?? "불러오는 중"}</Text>
                 <View style={styles.row}>
-                  {user.tags.map((tag) => (
+                  {(user?.giveFields ?? []).map((tag) => (
                     <View key={tag} style={styles.skillTag}>
                       <Text style={styles.skillTagText}>{tag}</Text>
                     </View>
@@ -127,7 +136,7 @@ export default function MyPage() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>관심 분야</Text>
             <View style={styles.row}>
-              {user.interests.map((item) => (
+              {(user?.interests ?? []).map((item) => (
                 <View key={item} style={styles.chip}>
                   <Text style={styles.chipText}>{item}</Text>
                 </View>
@@ -138,7 +147,7 @@ export default function MyPage() {
               활동 지역
             </Text>
             <View style={styles.row}>
-              {user.regions.map((item) => (
+              {(user?.regions ?? []).map((item) => (
                 <View key={item} style={[styles.chip, styles.chipWithIcon]}>
                   <Ionicons name="location-outline" size={11} color="#777777" />
                   <Text style={[styles.chipText, styles.chipTextIcon]}>{item}</Text>
@@ -153,7 +162,7 @@ export default function MyPage() {
               <View style={styles.row}>
                 <Text style={styles.sectionTitleInline}>내가 작성한 포스팅</Text>
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{visible.length}</Text>
+                <Text style={styles.badgeText}>{visible.length}</Text>
                 </View>
               </View>
               <View style={styles.segment}>
@@ -180,7 +189,8 @@ export default function MyPage() {
               </View>
             </View>
 
-            {visible.length === 0 && (
+            {loading && <ActivityIndicator color="#1A1A1A" style={{ paddingVertical: 24 }} />}
+            {!loading && visible.length === 0 && (
               <Text style={styles.empty}>
                 {tab === "open"
                   ? "모집 중인 포스팅이 없어요"
@@ -191,10 +201,12 @@ export default function MyPage() {
               <View key={post.id} style={styles.postItem}>
                 <View style={styles.postInfo}>
                   <Text style={styles.postTitle}>{post.title}</Text>
-                  <Text style={styles.postMeta}>{post.meta}</Text>
+                  <Text style={styles.postMeta}>
+                    {post.category} · 모집 {post.recruitment.current}/{post.recruitment.target}명
+                  </Text>
                 </View>
                 <View style={styles.row}>
-                  <SmallButton label="수정" onPress={() => router.push("/write")} />
+                  <SmallButton label="수정" onPress={() => router.push({ pathname: "/write", params: { boardId: post.id } })} />
                   <SmallButton label="삭제" onPress={() => askDelete(post.id)} />
                 </View>
               </View>

@@ -34,7 +34,7 @@ export const aiApi = {
     limit?: number;
   } = {}) {
     return apiFetch<{
-      boards: Array<Board & { matchScore: number; reason: string }>;
+      boards: Array<Board & { matchScore: number; recommendationReasons: string[] }>;
       total: number;
       page: number;
       hasNext: boolean;
@@ -47,7 +47,7 @@ export const aiApi = {
         rank: number;
         matchScore: number;
         matchedTags: string[];
-        reason: string;
+        recommendationReasons: string[];
       }>;
     }>(`/api/ai/recommend/users${toQuery({ boardId, limit })}`, { auth: true });
   },
