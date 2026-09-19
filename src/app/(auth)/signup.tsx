@@ -1,43 +1,170 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useMutation } from "@tanstack/react-query";
+import axios from "axios";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { checkNickname, register } from "../../api/auth";
+import { ApiErrorResponse } from "../../types/auth";
 
 export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [nickname, setNickname] = useState("");
+  const [checkedNickname, setCheckedNickname] = useState("");
+
+  const nicknameMutation = useMutation({
+    mutationFn: checkNickname,
+
+    onSuccess: (data) => {
+      if (data.isAvailable) {
+        setCheckedNickname(nickname.trim());
+      } else {
+        setCheckedNickname("");
+      }
+
+      Alert.alert("닉네임 중복 확인", data.message);
+    },
+
+    onError: (error) => {
+      setCheckedNickname("");
+
+      if (axios.isAxiosError<ApiErrorResponse>(error)) {
+        const message =
+          error.response?.data?.error ?? "닉네임을 확인하지 못했습니다.";
+
+        Alert.alert("중복 확인 실패", message);
+        return;
+      }
+
+      Alert.alert(
+        "중복 확인 실패",
+        "서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
+      );
+    },
+  });
+
+  const signupMutation = useMutation({
+    mutationFn: register,
+
+    onSuccess: () => {
+      Alert.alert("가입 완료", "회원가입이 완료되었습니다.", [
+        {
+          text: "확인",
+          onPress: () => router.replace("/login"),
+        },
+      ]);
+    },
+
+    onError: (error) => {
+      if (axios.isAxiosError<ApiErrorResponse>(error)) {
+        const message =
+          error.response?.data?.error ?? "회원가입에 실패했습니다.";
+
+        Alert.alert("회원가입 실패", message);
+        return;
+      }
+
+      Alert.alert(
+        "회원가입 실패",
+        "서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
+      );
+    },
+  });
+
+  const handleNicknameChange = (value: string) => {
+    setNickname(value);
+
+    if (checkedNickname) {
+      setCheckedNickname("");
+    }
+  };
+
+  const handleNicknameCheck = () => {
+    const trimmedNickname = nickname.trim();
+
+    if (!trimmedNickname) {
+      Alert.alert("알림", "닉네임을 입력해주세요.");
+      return;
+    }
+
+    if (trimmedNickname.length < 2 || trimmedNickname.length > 10) {
+      Alert.alert("알림", "닉네임은 2~10자로 입력해주세요.");
+      return;
+    }
+
+    nicknameMutation.mutate(trimmedNickname);
+  };
 
   const handleSignup = () => {
-    router.replace("/login");
+    const trimmedEmail = email.trim();
+    const trimmedNickname = nickname.trim();
+
+    if (!trimmedEmail || !password || !passwordConfirm || !trimmedNickname) {
+      Alert.alert("알림", "모든 정보를 입력해주세요.");
+      return;
+    }
+
+    if (password.length < 8) {
+      Alert.alert("알림", "비밀번호는 8자 이상 입력해주세요.");
+      return;
+    }
+
+    if (password !== passwordConfirm) {
+      Alert.alert("알림", "비밀번호가 일치하지 않습니다.");
+      return;
+    }
+
+    if (trimmedNickname.length < 2 || trimmedNickname.length > 10) {
+      Alert.alert("알림", "닉네임은 2~10자로 입력해주세요.");
+      return;
+    }
+
+    if (checkedNickname !== trimmedNickname) {
+      Alert.alert("알림", "닉네임 중복확인을 해주세요.");
+      return;
+    }
+
+    signupMutation.mutate({
+      email: trimmedEmail,
+      password,
+      nickname: trimmedNickname,
+    });
   };
+
+  const isPending = nicknameMutation.isPending || signupMutation.isPending;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       >
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           <TouchableOpacity
-            activeOpacity={0.7}
             style={styles.backButton}
+            activeOpacity={0.7}
             onPress={() => router.back()}
+            disabled={isPending}
           >
             <Ionicons name="chevron-back" size={24} color="#1C1C1C" />
           </TouchableOpacity>
@@ -60,6 +187,8 @@ export default function SignupScreen() {
               placeholderTextColor="#B8B8B8"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isPending}
               style={styles.input}
             />
 
@@ -71,6 +200,7 @@ export default function SignupScreen() {
               placeholder="8자 이상 입력해주세요"
               placeholderTextColor="#B8B8B8"
               secureTextEntry
+              editable={!isPending}
               style={styles.input}
             />
 
@@ -82,6 +212,7 @@ export default function SignupScreen() {
               placeholder="비밀번호를 다시 입력해주세요"
               placeholderTextColor="#B8B8B8"
               secureTextEntry
+              editable={!isPending}
               style={styles.input}
             />
 
@@ -90,23 +221,40 @@ export default function SignupScreen() {
             <View style={styles.nicknameInput}>
               <TextInput
                 value={nickname}
-                onChangeText={setNickname}
+                onChangeText={handleNicknameChange}
                 placeholder="2~10자 이내로 입력해주세요"
                 placeholderTextColor="#B8B8B8"
+                maxLength={10}
+                editable={!isPending}
                 style={styles.nicknameTextInput}
               />
 
-              <TouchableOpacity activeOpacity={0.7} style={styles.checkButton}>
-                <Text style={styles.checkButtonText}>중복확인</Text>
+              <TouchableOpacity
+                onPress={handleNicknameCheck}
+                disabled={isPending}
+              >
+                <Text style={styles.checkText}>
+                  {nicknameMutation.isPending
+                    ? "확인 중"
+                    : checkedNickname === nickname.trim() && checkedNickname
+                      ? "확인 완료"
+                      : "중복확인"}
+                </Text>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity
+              style={[
+                styles.signupButton,
+                signupMutation.isPending && styles.disabledButton,
+              ]}
               activeOpacity={0.85}
-              style={styles.signupButton}
               onPress={handleSignup}
+              disabled={isPending}
             >
-              <Text style={styles.signupButtonText}>가입 완료</Text>
+              <Text style={styles.signupButtonText}>
+                {signupMutation.isPending ? "가입 중..." : "가입 완료"}
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -131,47 +279,47 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    marginTop: 4,
+    marginTop: 6,
     marginLeft: -8,
     alignItems: "center",
     justifyContent: "center",
   },
   titleArea: {
-    marginTop: 77,
+    marginTop: 64,
   },
   title: {
     fontFamily: "PretendardBold",
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 28,
+    lineHeight: 36,
     color: "#1C1C1C",
   },
   subtitle: {
     marginTop: 8,
     fontFamily: "PretendardRegular",
-    fontSize: 12,
-    color: "#999999",
+    fontSize: 13,
+    color: "#9A9A9A",
   },
   form: {
-    marginTop: 38,
+    marginTop: 32,
   },
   label: {
     marginBottom: 8,
-    fontFamily: "PretendardSemiBold",
+    fontFamily: "PretendardMedium",
     fontSize: 12,
-    color: "#858585",
+    color: "#8A8A8A",
   },
   fieldLabel: {
     marginTop: 18,
     marginBottom: 8,
-    fontFamily: "PretendardSemiBold",
+    fontFamily: "PretendardMedium",
     fontSize: 12,
-    color: "#858585",
+    color: "#8A8A8A",
   },
   input: {
     height: 48,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: "#E8E8E8",
     borderRadius: 10,
     backgroundColor: "#FAFAFA",
     fontFamily: "PretendardRegular",
@@ -181,9 +329,9 @@ const styles = StyleSheet.create({
   nicknameInput: {
     height: 48,
     paddingLeft: 16,
-    paddingRight: 10,
+    paddingRight: 14,
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: "#E8E8E8",
     borderRadius: 10,
     backgroundColor: "#FAFAFA",
     flexDirection: "row",
@@ -192,19 +340,16 @@ const styles = StyleSheet.create({
   nicknameTextInput: {
     flex: 1,
     height: "100%",
-    paddingVertical: 0,
+    padding: 0,
     fontFamily: "PretendardRegular",
     fontSize: 13,
     color: "#1C1C1C",
   },
-  checkButton: {
-    paddingHorizontal: 6,
-    paddingVertical: 8,
-  },
-  checkButtonText: {
+  checkText: {
+    marginLeft: 12,
     fontFamily: "PretendardMedium",
     fontSize: 12,
-    color: "#A7A7A7",
+    color: "#9A9A9A",
   },
   signupButton: {
     height: 52,
@@ -213,6 +358,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8D99C",
     alignItems: "center",
     justifyContent: "center",
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   signupButtonText: {
     fontFamily: "PretendardBold",
