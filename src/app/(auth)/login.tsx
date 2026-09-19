@@ -1,66 +1,51 @@
 import { useMutation } from "@tanstack/react-query";
-import axios from "axios";
 import { router } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import { useState } from "react";
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { login } from "../../api/auth";
-import { ApiErrorResponse } from "../../types/auth";
+import { authApi } from "../../api/auth";
+
+type LoginVariables = {
+  email: string;
+  password: string;
+};
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const loginMutation = useMutation({
-    mutationFn: login,
+    mutationFn: ({ email, password }: LoginVariables) =>
+      authApi.login(email, password),
 
-    onSuccess: async (data) => {
-      try {
-        await Promise.all([
-          SecureStore.setItemAsync("accessToken", data.accessToken),
-          SecureStore.setItemAsync("refreshToken", data.refreshToken),
-        ]);
-
-        if (data.user.onboardingCompleted) {
-          router.replace("/?loggedIn=true");
-          return;
-        }
-
-        router.replace("/onboarding");
-      } catch {
-        Alert.alert(
-          "로그인 실패",
-          "로그인 정보를 저장하지 못했습니다. 다시 시도해주세요.",
-        );
-      }
-    },
-
-    onError: (error) => {
-      if (axios.isAxiosError<ApiErrorResponse>(error)) {
-        const message =
-          error.response?.data?.error ?? "이메일 또는 비밀번호를 확인해주세요.";
-
-        Alert.alert("로그인 실패", message);
+    onSuccess: (data) => {
+      if (data.user.onboardingCompleted) {
+        router.replace("/?loggedIn=true");
         return;
       }
 
-      Alert.alert(
-        "로그인 실패",
-        "서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
-      );
+      router.replace("/onboarding");
+    },
+
+    onError: (error) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "로그인에 실패했습니다.";
+
+      Alert.alert("로그인 실패", message);
     },
   });
 
@@ -154,7 +139,9 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <View style={styles.signupArea}>
-              <Text style={styles.signupGuide}>아직 계정이 없으신가요?</Text>
+              <Text style={styles.signupGuide}>
+                아직 계정이 없으신가요?
+              </Text>
 
               <TouchableOpacity
                 onPress={handleSignup}

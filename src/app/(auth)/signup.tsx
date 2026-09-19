@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation } from "@tanstack/react-query";
-import axios from "axios";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -16,8 +15,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { checkNickname, register } from "../../api/auth";
-import { ApiErrorResponse } from "../../types/auth";
+import { authApi } from "../../api/auth";
+
+type SignupVariables = {
+  email: string;
+  password: string;
+  nickname: string;
+};
 
 export default function SignupScreen() {
   const [email, setEmail] = useState("");
@@ -27,7 +31,7 @@ export default function SignupScreen() {
   const [checkedNickname, setCheckedNickname] = useState("");
 
   const nicknameMutation = useMutation({
-    mutationFn: checkNickname,
+    mutationFn: (nickname: string) => authApi.checkNickname(nickname),
 
     onSuccess: (data) => {
       if (data.isAvailable) {
@@ -42,23 +46,18 @@ export default function SignupScreen() {
     onError: (error) => {
       setCheckedNickname("");
 
-      if (axios.isAxiosError<ApiErrorResponse>(error)) {
-        const message =
-          error.response?.data?.error ?? "닉네임을 확인하지 못했습니다.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "닉네임을 확인하지 못했습니다.";
 
-        Alert.alert("중복 확인 실패", message);
-        return;
-      }
-
-      Alert.alert(
-        "중복 확인 실패",
-        "서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
-      );
+      Alert.alert("중복 확인 실패", message);
     },
   });
 
   const signupMutation = useMutation({
-    mutationFn: register,
+    mutationFn: ({ email, password, nickname }: SignupVariables) =>
+      authApi.register(email, password, nickname),
 
     onSuccess: () => {
       Alert.alert("가입 완료", "회원가입이 완료되었습니다.", [
@@ -70,18 +69,12 @@ export default function SignupScreen() {
     },
 
     onError: (error) => {
-      if (axios.isAxiosError<ApiErrorResponse>(error)) {
-        const message =
-          error.response?.data?.error ?? "회원가입에 실패했습니다.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "회원가입에 실패했습니다.";
 
-        Alert.alert("회원가입 실패", message);
-        return;
-      }
-
-      Alert.alert(
-        "회원가입 실패",
-        "서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
-      );
+      Alert.alert("회원가입 실패", message);
     },
   });
 
@@ -145,7 +138,8 @@ export default function SignupScreen() {
     });
   };
 
-  const isPending = nicknameMutation.isPending || signupMutation.isPending;
+  const isPending =
+    nicknameMutation.isPending || signupMutation.isPending;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -170,7 +164,9 @@ export default function SignupScreen() {
           </TouchableOpacity>
 
           <View style={styles.titleArea}>
-            <Text style={styles.title}>계정을{"\n"}만들어보세요</Text>
+            <Text style={styles.title}>
+              계정을{"\n"}만들어보세요
+            </Text>
 
             <Text style={styles.subtitle}>
               정보를 입력하고 팀원을 찾아보세요

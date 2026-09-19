@@ -1,31 +1,64 @@
-import {
-    LoginRequest,
-    LoginResponse,
-    NicknameCheckResponse,
-    RegisterRequest,
-    RegisterResponse,
-} from "../types/auth";
-import api from "./client";
+import { sessionStore } from "@/auth/session";
+import { apiFetch, toQuery } from "./client";
 
-export const login = async (data: LoginRequest) => {
-  const response = await api.post<LoginResponse>("/api/auth/login", data);
-
-  return response.data;
+export type LoginResponse = {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    email: string;
+    nickname: string;
+    onboardingCompleted: boolean;
+  };
 };
 
-export const register = async (data: RegisterRequest) => {
-  const response = await api.post<RegisterResponse>("/api/auth/register", data);
-
-  return response.data;
+export type RegisterResponse = {
+  user: {
+    id: string;
+    email: string;
+    nickname: string;
+  };
+  nextAction: "LOGIN";
 };
 
-export const checkNickname = async (nickname: string) => {
-  const response = await api.get<NicknameCheckResponse>(
-    "/api/auth/check-nickname",
-    {
-      params: { nickname },
-    },
-  );
+export type NicknameCheckResponse = {
+  isAvailable: boolean;
+  message: string;
+};
 
-  return response.data;
+export const authApi = {
+  async login(email: string, password: string) {
+    const response = await apiFetch<LoginResponse>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+
+    await sessionStore.save(response.accessToken, response.refreshToken);
+
+    return response;
+  },
+
+  register(email: string, password: string, nickname: string) {
+    return apiFetch<RegisterResponse>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, nickname }),
+    });
+  },
+
+  checkNickname(nickname: string) {
+    return apiFetch<NicknameCheckResponse>(
+      `/api/auth/check-nickname${toQuery({ nickname })}`,
+    );
+  },
+
+  async logout() {
+    try {
+      await apiFetch<void>("/api/auth/logout", {
+        method: "POST",
+        auth: true,
+      });
+    } finally {
+      await sessionStore.clear();
+    }
+  },
 };
