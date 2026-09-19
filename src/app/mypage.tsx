@@ -161,9 +161,7 @@ export default function MyPage() {
             <View style={styles.postsHeader}>
               <View style={styles.row}>
                 <Text style={styles.sectionTitleInline}>내가 작성한 포스팅</Text>
-                <View style={styles.badge}>
-                <Text style={styles.badgeText}>{visible.length}</Text>
-                </View>
+                <Text style={styles.postCount}>{visible.length}</Text>
               </View>
               <View style={styles.segment}>
                 <Pressable
@@ -321,7 +319,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     marginLeft: 6,
   },
-  badgeText: { fontSize: 10, fontWeight: "bold", color: "#FFFFFF" },
+  postCount: { fontSize: 14, fontWeight: "bold", color: "#1A1A1A", marginLeft: 6 },
   segment: {
     flexDirection: "row",
     backgroundColor: "#F0F0F0",

@@ -649,7 +649,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E5E5",
     marginLeft: 3,
   },
-  progressOn: { backgroundColor: "#1A1A1A" },
+  progressOn: { backgroundColor: "#F8D99C" },
 
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
@@ -859,11 +859,11 @@ const styles = StyleSheet.create({
   nextButton: {
     height: 48,
     borderRadius: 12,
-    backgroundColor: "#1A1A1A",
+    backgroundColor: "#F8D99C",
     alignItems: "center",
     justifyContent: "center",
   },
-  nextButtonText: { fontSize: 14, fontWeight: "bold", color: "#F6D68F" },
+  nextButtonText: { fontSize: 14, fontWeight: "bold", color: "#111111" },
   prevButton: {
     flex: 1,
     height: 48,
