@@ -1,16 +1,16 @@
+import { Ionicons } from "@expo/vector-icons";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  View,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
-  ScrollView,
-  Pressable,
-  Image,
-  StyleSheet,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 
 type Tag = { type: "GIVE" | "NEED"; label: string };
 
@@ -18,8 +18,8 @@ type Post = {
   id: number;
   category: string;
   region: string;
-  ago: string; // 화면에 보이는 "2시간 전"
-  hoursAgo: number; // 최신순 정렬용 숫자
+  ago: string;
+  hoursAgo: number;
   title: string;
   tags: Tag[];
   author: string;
@@ -29,7 +29,6 @@ type Post = {
 
 const categories = ["전체", "IT/AI", "창업", "ESG", "마케팅", "디자인"];
 
-// 지금은 예시 데이터예요. 나중에 백엔드 API(GET /api/boards)에서 받아온 값으로 바꾸면 돼요.
 const posts: Post[] = [
   {
     id: 1,
@@ -85,7 +84,6 @@ const posts: Post[] = [
   },
 ];
 
-// 하단 탭: 나중에 Expo Router의 진짜 탭 이동으로 바꿀 자리예요.
 const tabs = [
   { label: "홈", icon: "home-outline", activeIcon: "home" },
   { label: "포스팅", icon: "add", activeIcon: "add" },
@@ -93,7 +91,6 @@ const tabs = [
   { label: "마이", icon: "person-outline", activeIcon: "person" },
 ] as const;
 
-// 사용자 프로필 이미지예요. 지금은 모든 사용자가 같은 이미지를 써요.
 function Avatar({ size = 24 }: { size?: number }) {
   return (
     <Image
@@ -106,32 +103,36 @@ function Avatar({ size = 24 }: { size?: number }) {
 
 export default function Home() {
   const router = useRouter();
+  const { loggedIn } = useLocalSearchParams<{ loggedIn?: string }>();
+
   const [category, setCategory] = useState("전체");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"recommend" | "latest">("recommend");
 
-  // 카테고리와 검색어로 걸러내고, 최신순이면 시간 순서로 정렬해요.
   const filtered = posts
-    .filter((p) => category === "전체" || p.category === category)
-    .filter((p) =>
-      p.title.toLowerCase().includes(query.trim().toLowerCase())
+    .filter((post) => category === "전체" || post.category === category)
+    .filter((post) =>
+      post.title.toLowerCase().includes(query.trim().toLowerCase()),
     );
+
   const visible =
     sort === "latest"
       ? [...filtered].sort((a, b) => a.hoursAgo - b.hoursAgo)
       : filtered;
 
-  // 하단 탭을 누르면 해당 화면으로 이동해요.
   const goTab = (label: string) => {
     if (label === "포스팅") router.push("/write");
     if (label === "채팅") router.replace("/chat-list");
     if (label === "마이") router.replace("/mypage");
   };
 
+  if (loggedIn !== "true") {
+    return <Redirect href="/login" />;
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.container}>
-        {/* 상단 헤더 */}
         <View style={styles.header}>
           <View style={styles.logoRow}>
             <Image
@@ -141,40 +142,44 @@ export default function Home() {
             />
             <Text style={styles.logoName}>GUHAM</Text>
           </View>
+
           <Pressable hitSlop={8} onPress={() => {}}>
             <Ionicons name="notifications-outline" size={22} color="#111111" />
           </Pressable>
         </View>
 
-        {/* 카테고리 칩 */}
         <View style={styles.topArea}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipRow}
           >
-            {categories.map((c) => {
-              const selected = c === category;
+            {categories.map((item) => {
+              const selected = item === category;
+
               return (
                 <Pressable
-                  key={c}
+                  key={item}
                   style={[styles.chip, selected && styles.chipSelected]}
-                  onPress={() => setCategory(c)}
+                  onPress={() => setCategory(item)}
                 >
                   <Text
-                    style={[styles.chipText, selected && styles.chipTextSelected]}
+                    style={[
+                      styles.chipText,
+                      selected && styles.chipTextSelected,
+                    ]}
                   >
-                    {c}
+                    {item}
                   </Text>
                 </Pressable>
               );
             })}
           </ScrollView>
 
-          {/* 검색창 + 정렬 */}
           <View style={styles.searchRow}>
             <View style={styles.searchBox}>
               <Ionicons name="search" size={14} color="#AAAAAA" />
+
               <TextInput
                 style={styles.searchInput}
                 placeholder="검색"
@@ -183,6 +188,7 @@ export default function Home() {
                 onChangeText={setQuery}
               />
             </View>
+
             <View style={styles.segment}>
               <Pressable
                 style={[
@@ -196,6 +202,7 @@ export default function Home() {
                   size={10}
                   color={sort === "recommend" ? "#111111" : "#888888"}
                 />
+
                 <Text
                   style={[
                     styles.segmentText,
@@ -205,6 +212,7 @@ export default function Home() {
                   추천순
                 </Text>
               </Pressable>
+
               <Pressable
                 style={[
                   styles.segmentItem,
@@ -225,11 +233,11 @@ export default function Home() {
           </View>
         </View>
 
-        {/* 포스팅 목록 */}
         <ScrollView contentContainerStyle={styles.list}>
           {visible.length === 0 && (
             <Text style={styles.empty}>조건에 맞는 포스팅이 없어요</Text>
           )}
+
           {visible.map((post) => (
             <Pressable
               key={post.id}
@@ -242,7 +250,9 @@ export default function Home() {
                 </Text>
                 <Text style={styles.ago}>{post.ago}</Text>
               </View>
+
               <Text style={styles.title}>{post.title}</Text>
+
               <View style={styles.tagRow}>
                 {post.tags.map((tag) => (
                   <View
@@ -265,11 +275,13 @@ export default function Home() {
                   </View>
                 ))}
               </View>
+
               <View style={styles.cardBottom}>
                 <View style={styles.authorRow}>
                   <Avatar size={24} />
                   <Text style={styles.author}>{post.author}</Text>
                 </View>
+
                 <Text style={styles.recruit}>
                   모집 {post.joined}/{post.capacity}명
                 </Text>
@@ -278,10 +290,10 @@ export default function Home() {
           ))}
         </ScrollView>
 
-        {/* 하단 탭 */}
         <View style={styles.tabBar}>
           {tabs.map((tab) => {
             const active = tab.label === "홈";
+
             return (
               <Pressable
                 key={tab.label}
@@ -293,7 +305,10 @@ export default function Home() {
                   size={22}
                   color={active ? "#F0B36B" : "#999999"}
                 />
-                <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+
+                <Text
+                  style={[styles.tabLabel, active && styles.tabLabelActive]}
+                >
                   {tab.label}
                 </Text>
               </Pressable>
@@ -306,8 +321,10 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#FFFFFF" },
-  // 웹 브라우저에서 볼 때도 폰 너비처럼 보이게 제한해요.
+  safe: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
   container: {
     flex: 1,
     width: "100%",
@@ -315,8 +332,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     backgroundColor: "#F5F5F5",
   },
-
-  // 헤더
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -325,18 +340,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  logoRow: { flexDirection: "row", alignItems: "center" },
-  logo: { width: 26, height: 26 },
-  logoName: { fontSize: 16, fontWeight: "bold", marginLeft: 8 },
-
-  // 칩 + 검색 영역
+  logoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  logo: {
+    width: 26,
+    height: 26,
+  },
+  logoName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
   topArea: {
     backgroundColor: "#FFFFFF",
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#EEEEEE",
   },
-  chipRow: { paddingHorizontal: 20, paddingVertical: 4 },
+  chipRow: {
+    paddingHorizontal: 20,
+    paddingVertical: 4,
+  },
   chip: {
     borderWidth: 1,
     borderColor: "#E5E5E5",
@@ -346,10 +372,18 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     marginRight: 8,
   },
-  chipSelected: { backgroundColor: "#1A1A1A", borderColor: "#1A1A1A" },
-  chipText: { fontSize: 12, color: "#444444" },
-  chipTextSelected: { color: "#FFFFFF", fontWeight: "bold" },
-
+  chipSelected: {
+    backgroundColor: "#1A1A1A",
+    borderColor: "#1A1A1A",
+  },
+  chipText: {
+    fontSize: 12,
+    color: "#444444",
+  },
+  chipTextSelected: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -367,7 +401,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
   },
-  searchInput: { flex: 1, marginLeft: 6, fontSize: 12, padding: 0 },
+  searchInput: {
+    flex: 1,
+    marginLeft: 6,
+    fontSize: 12,
+    padding: 0,
+  },
   segment: {
     flexDirection: "row",
     backgroundColor: "#F0F0F0",
@@ -382,13 +421,27 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 6,
   },
-  segmentSelected: { backgroundColor: "#FFFFFF" },
-  segmentText: { fontSize: 11, color: "#888888", marginLeft: 2 },
-  segmentTextSelected: { color: "#111111", fontWeight: "bold" },
-
-  // 목록
-  list: { padding: 16 },
-  empty: { textAlign: "center", color: "#999999", marginTop: 40, fontSize: 13 },
+  segmentSelected: {
+    backgroundColor: "#FFFFFF",
+  },
+  segmentText: {
+    fontSize: 11,
+    color: "#888888",
+    marginLeft: 2,
+  },
+  segmentTextSelected: {
+    color: "#111111",
+    fontWeight: "bold",
+  },
+  list: {
+    padding: 16,
+  },
+  empty: {
+    textAlign: "center",
+    color: "#999999",
+    marginTop: 40,
+    fontSize: 13,
+  },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -397,11 +450,28 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
-  cardTop: { flexDirection: "row", justifyContent: "space-between" },
-  meta: { fontSize: 11, color: "#888888" },
-  ago: { fontSize: 11, color: "#AAAAAA" },
-  title: { fontSize: 15, fontWeight: "bold", marginTop: 8 },
-  tagRow: { flexDirection: "row", flexWrap: "wrap", marginTop: 10 },
+  cardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  meta: {
+    fontSize: 11,
+    color: "#888888",
+  },
+  ago: {
+    fontSize: 11,
+    color: "#AAAAAA",
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: "bold",
+    marginTop: 8,
+  },
+  tagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 10,
+  },
   tag: {
     borderRadius: 4,
     paddingHorizontal: 8,
@@ -409,22 +479,41 @@ const styles = StyleSheet.create({
     marginRight: 6,
     marginBottom: 6,
   },
-  tagGive: { backgroundColor: "#E3F2FD" },
-  tagNeed: { backgroundColor: "#FCE4EC" },
-  tagText: { fontSize: 11, fontWeight: "600" },
-  tagTextGive: { color: "#1E88E5" },
-  tagTextNeed: { color: "#D81B60" },
+  tagGive: {
+    backgroundColor: "#E3F2FD",
+  },
+  tagNeed: {
+    backgroundColor: "#FCE4EC",
+  },
+  tagText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  tagTextGive: {
+    color: "#1E88E5",
+  },
+  tagTextNeed: {
+    color: "#D81B60",
+  },
   cardBottom: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginTop: 6,
   },
-  authorRow: { flexDirection: "row", alignItems: "center" },
-  author: { fontSize: 12, color: "#666666", marginLeft: 6 },
-  recruit: { fontSize: 11, color: "#888888" },
-
-  // 하단 탭
+  authorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  author: {
+    fontSize: 12,
+    color: "#666666",
+    marginLeft: 6,
+  },
+  recruit: {
+    fontSize: 11,
+    color: "#888888",
+  },
   tabBar: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
@@ -433,7 +522,16 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 6,
   },
-  tabItem: { flex: 1, alignItems: "center" },
-  tabLabel: { fontSize: 10, color: "#999999", marginTop: 2 },
-  tabLabelActive: { color: "#F0B36B" },
+  tabItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  tabLabel: {
+    fontSize: 10,
+    color: "#999999",
+    marginTop: 2,
+  },
+  tabLabelActive: {
+    color: "#F0B36B",
+  },
 });
