@@ -1,8 +1,20 @@
 import { sessionStore } from "@/auth/session";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
-export const API_BASE_URL = (
+const configuredApiUrl = (
   process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000"
 ).replace(/\/$/, "");
+
+const expoHost = Constants.expoConfig?.hostUri?.split(":")[0];
+const usesLoopback = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(
+  configuredApiUrl,
+);
+
+export const API_BASE_URL =
+  Platform.OS !== "web" && usesLoopback && expoHost
+    ? `http://${expoHost}:3000`
+    : configuredApiUrl;
 
 type ApiFetchOptions = RequestInit & {
   auth?: boolean;

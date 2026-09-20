@@ -55,8 +55,11 @@ export async function createChatSocket(): Promise<
 
   return io(API_BASE_URL, {
     path: "/chat",
-    transports: ["websocket"],
+    transports: ["polling", "websocket"],
     auth: { accessToken },
     autoConnect: false,
+    reconnection: true,
+    reconnectionAttempts: 5,
+    timeout: 15000,
   });
 }

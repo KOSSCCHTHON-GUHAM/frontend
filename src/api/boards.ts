@@ -8,7 +8,11 @@ const appendImages = (form: FormData, images: UploadImage[]) => {
       form.append("images", image.file, image.name);
       return;
     }
-    form.append("images", image as unknown as Blob);
+    form.append("images", {
+      uri: image.uri,
+      name: image.name,
+      type: image.type,
+    } as unknown as Blob);
   });
 };
 
