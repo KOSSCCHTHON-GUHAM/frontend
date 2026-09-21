@@ -1,6 +1,5 @@
 import { sessionStore } from "@/auth/session";
 import { io, type Socket } from "socket.io-client";
-import { API_BASE_URL } from "./client";
 import type { ChatMessage, MessageType } from "./types";
 
 export type ChatServerEvents = {
@@ -53,7 +52,7 @@ export async function createChatSocket(): Promise<
     throw new Error("로그인이 필요합니다.");
   }
 
-  return io(API_BASE_URL, {
+  return io('http://172.20.10.2:3000', {
     path: "/chat",
     transports: ["polling", "websocket"],
     auth: { accessToken },
